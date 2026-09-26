@@ -239,7 +239,12 @@ final class HostLiveActivityCoordinator {
 
         guard let desired else {
             reconcileNotes[hostID] = "idle — \(desireBlocker(for: hostID))"
-            endNow(hostID)
+            if relayRoute().usableURL == nil {
+                dropSession(hostID, endOnController: true)
+                applied[hostID] = nil
+            } else {
+                endNow(hostID)
+            }
             return
         }
         guard let key = notificationKey(for: hostID),
@@ -479,7 +484,7 @@ final class HostLiveActivityCoordinator {
 
     private func perform(_ job: TokenJob, hostID: Host.ID) async -> Bool {
         let route = relayRoute()
-        guard route.usableURL != nil else { return false }
+        if job != .clear, route.usableURL == nil { return false }
         guard let token = deviceToken() else { return false }
         let pins = pinnedPaneIDs(hostID)
         let layout = rowLayout(hostID)

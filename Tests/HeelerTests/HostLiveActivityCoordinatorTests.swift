@@ -210,6 +210,35 @@ struct HostLiveActivityCoordinatorTests {
         #expect(coordinator.reconcileNotes[host.id]?.contains("Push Relay URL") == true)
     }
 
+    @Test func unusableRelayEndsLocallyAndOnlyADeliberateSwitchOffClears() async throws {
+        let (defaults, cleanup) = try makeDefaults()
+        defer { cleanup() }
+        try await registerDevice()
+        armWorld()
+        let coordinator = makeCoordinator(defaults: defaults)
+        coordinator.start()
+        coordinator.agentsDidChange([agent(observedPaneID, .working)])
+        try await waitUntil("the activity should start") { !controller.requestedHandles.isEmpty }
+        let activityID = try #require(controller.requestedHandles.first?.id)
+        controller.emitToken(id: activityID, Data([0x11]))
+        try await waitUntil("the token should be written") {
+            try await liveActivityToken() == "11"
+        }
+
+        world.relayRoute = .disabled
+        coordinator.agentsDidChange([agent(observedPaneID, .working)])
+        try await waitUntil("an unusable relay should end the activity locally") {
+            !controller.ended.isEmpty
+        }
+        try await waitPastSettle()
+        #expect(try await liveActivityToken() == "11")
+
+        coordinator.setEnabled(false, for: host.id)
+        try await waitUntil("switching off should clear the field without a usable relay") {
+            try await liveActivityToken() == nil
+        }
+    }
+
     @Test func staysIdleWhenThePreferenceIsOff() async throws {
         let (defaults, cleanup) = try makeDefaults()
         defer { cleanup() }

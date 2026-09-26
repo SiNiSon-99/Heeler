@@ -76,7 +76,7 @@ final class PushRegistrationStore {
         case unknown
         /// iOS has never asked; the permission prompt is still available.
         case needsPermission
-        /// No usable custom relay is configured; do not ask Apple for a token.
+        /// No usable custom relay is configured; the permission prompt is withheld.
         case routingUnavailable
         case denied
         /// Registration is in flight; the token callback has not fired yet.
@@ -115,10 +115,6 @@ final class PushRegistrationStore {
     /// exists, otherwise just reflect where the user left the permission.
     func refresh() async {
         if case .registered = state { return }
-        guard relayRoute().usableURL != nil else {
-            state = .routingUnavailable
-            return
-        }
         switch await client.authorizationStatus() {
         case .authorized, .provisional, .ephemeral:
             state = .waitingForToken

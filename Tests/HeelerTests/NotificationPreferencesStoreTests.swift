@@ -300,6 +300,41 @@ struct NotificationPreferencesStoreTests {
         #expect(await transport.replacedNotificationRegistrations.count == 1)
     }
 
+    @Test func disabledRouteStillRefreshesAndDeliberatelyRemovesAnExistingRegistration()
+        async throws
+    {
+        let transport = ScriptedTransport()
+        try await NotificationRegistrationCeremony(keys: keys).register(
+            hostID: host.id, hostName: host.displayName, deviceToken: token,
+            route: .custom(URL(string: "https://relay.example.com")!), over: transport)
+        let client = ScriptedPushRegistrationClient()
+        client.status = .authorized
+        let push = PushRegistrationStore(
+            client: client, environment: .sandbox, relayRoute: { .disabled })
+        let store = NotificationPreferencesStore(
+            transports: ScriptedTransportProvider(transports: [host.id: transport]),
+            deviceToken: { push.deviceToken },
+            relayRoute: { .disabled },
+            ceremony: NotificationRegistrationCeremony(keys: keys))
+        store.setHosts([host])
+
+        await push.refresh()
+        push.deviceTokenDidArrive(Data([0x0a, 0x1b, 0x2c, 0x3d]))
+        await store.refresh()
+
+        #expect(store.states[host.id] == .idle(.init(isRegistered: true, notify: .init())))
+        #expect(store.confirmedTriggers(for: host.id) == NotificationTriggerPreferences())
+        #expect(await transport.replacedNotificationRegistrations.count == 1)
+
+        await store.setNotificationsEnabled(false, for: host)
+
+        let file = try NotificationRegistrationFile.decode(
+            await transport.notificationRegistration)
+        #expect(!file.containsDevice(token: token.hex))
+        #expect(try keys.record(forHost: host.id) == nil)
+        #expect(store.states[host.id] == .idle(.init(isRegistered: false, notify: .init())))
+    }
+
     // MARK: Done flag
 
     @Test func doneToggleRewritesTheFlagOverSSH() async throws {
