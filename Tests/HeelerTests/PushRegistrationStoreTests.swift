@@ -15,7 +15,31 @@ struct PushRegistrationStoreTests {
     private let client = ScriptedPushRegistrationClient()
 
     private func makeStore(environment: APNSEnvironment = .sandbox) -> PushRegistrationStore {
-        PushRegistrationStore(client: client, environment: environment)
+        PushRegistrationStore(
+            client: client, environment: environment,
+            relayRoute: { .custom(URL(string: "https://relay.example.com")!) })
+    }
+
+    @Test func disabledOrInvalidRouteWithholdsThePermissionPrompt() async {
+        client.grantResult = .success(true)
+        for route in [NotificationRelayRoute.invalid, .disabled] {
+            let store = PushRegistrationStore(client: client, relayRoute: { route })
+            await store.enable()
+            #expect(store.state == .routingUnavailable)
+        }
+        #expect(client.registerCallCount == 0)
+    }
+
+    @Test func disabledOrInvalidRouteStillCapturesTheTokenOfAnExistingPermission() async {
+        client.status = .authorized
+        for (index, route) in [NotificationRelayRoute.invalid, .disabled].enumerated() {
+            let store = PushRegistrationStore(client: client, relayRoute: { route })
+            await store.refresh()
+            #expect(store.state == .waitingForToken)
+            #expect(client.registerCallCount == index + 1)
+            store.deviceTokenDidArrive(Data([0xAB]))
+            #expect(store.deviceToken != nil)
+        }
     }
 
     @Test func enableRequestsPermissionThenRegistersForAToken() async {

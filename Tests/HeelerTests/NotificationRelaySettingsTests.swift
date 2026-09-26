@@ -14,20 +14,19 @@ struct NotificationRelaySettingsTests {
         return defaults
     }
 
-    @Test func emptyByDefaultMeansNoCustomURL() {
+    @Test func emptyByDefaultDisablesPush() {
         let settings = NotificationRelaySettings(defaults: makeDefaults())
         #expect(settings.rawValue.isEmpty)
         #expect(settings.relayURL == nil)
         #expect(!settings.hasInvalidEntry)
-        #expect(
-            NotificationRelayEndpoint.productionBaseURL?.absoluteString
-                == "https://heeler-apns.bybee.dev")
+        #expect(settings.route == .disabled)
     }
 
     @Test func acceptsAnHTTPSBaseURL() {
         let settings = NotificationRelaySettings(defaults: makeDefaults())
         settings.rawValue = "https://relay.example.com"
         #expect(settings.relayURL?.absoluteString == "https://relay.example.com")
+        #expect(settings.route.usableURL?.absoluteString == "https://relay.example.com")
         #expect(!settings.hasInvalidEntry)
         #expect(!settings.hasInsecureHTTPEntry)
     }
@@ -82,10 +81,11 @@ struct NotificationRelaySettingsTests {
         #expect(second.relayURL == nil)
     }
 
-    @Test func migratesThePreviousProductionRelayToTheCurrentDefault() {
+    @Test(arguments: NotificationRelayEndpoint.originalBaseURLStrings)
+    func migratesOriginalRelayToDisabled(_ original: String) {
         let defaults = makeDefaults()
         defaults.set(
-            "https://herdr-push-relay.69709991236.workers.dev/",
+            "\(original)/",
             forKey: "notification-relay-url")
 
         let settings = NotificationRelaySettings(defaults: defaults)
@@ -93,8 +93,12 @@ struct NotificationRelaySettingsTests {
         #expect(settings.rawValue.isEmpty)
         #expect(settings.relayURL == nil)
         #expect(defaults.string(forKey: "notification-relay-url") == nil)
-        #expect(
-            NotificationRelayEndpoint.resolve(customBaseURL: settings.relayURL)?
-                .absoluteString == "https://heeler-apns.bybee.dev")
+        #expect(settings.route == .disabled)
+    }
+
+    @Test func enteredOriginalRelayIsInvalid() {
+        let settings = NotificationRelaySettings(defaults: makeDefaults())
+        settings.rawValue = "https://heeler-apns.bybee.dev/"
+        #expect(settings.route == .invalid)
     }
 }

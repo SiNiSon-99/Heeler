@@ -45,6 +45,7 @@ struct NotificationPreferencesStoreTests {
         let store = NotificationPreferencesStore(
             transports: provider,
             deviceToken: { deviceToken },
+            relayRoute: { .custom(URL(string: "https://relay.example.com")!) },
             ceremony: NotificationRegistrationCeremony(keys: keys))
         store.setHosts([host])
         return store
@@ -61,12 +62,12 @@ struct NotificationPreferencesStoreTests {
 
     private func makeStore(
         transport: any Transport,
-        relayBaseURL: @escaping @MainActor () -> URL?
+        relayRoute: @escaping @MainActor () -> NotificationRelayRoute
     ) -> NotificationPreferencesStore {
         let store = NotificationPreferencesStore(
             transports: ScriptedTransportProvider(transports: [host.id: transport]),
             deviceToken: { self.token },
-            relayBaseURL: relayBaseURL,
+            relayRoute: relayRoute,
             ceremony: NotificationRegistrationCeremony(keys: keys))
         store.setHosts([host])
         return store
@@ -257,7 +258,7 @@ struct NotificationPreferencesStoreTests {
         let transport = ScriptedTransport()
         let store = makeStore(
             transport: transport,
-            relayBaseURL: { URL(string: "https://relay.example.com") })
+            relayRoute: { .custom(URL(string: "https://relay.example.com")!) })
         await store.refresh()
 
         await store.setNotificationsEnabled(true, for: host)
@@ -267,16 +268,71 @@ struct NotificationPreferencesStoreTests {
         #expect(config.relayURL == "https://relay.example.com")
     }
 
-    @Test func enablingWithNoCustomRelayWritesTheProductionRelay() async throws {
+    @Test func enablingWithDisabledRelayWritesNothing() async throws {
         let transport = ScriptedTransport()
-        let store = makeStore(transport: transport, relayBaseURL: { nil })
+        let store = makeStore(transport: transport, relayRoute: { .disabled })
         await store.refresh()
 
         await store.setNotificationsEnabled(true, for: host)
 
-        let written = try #require(await transport.notificationConfig)
-        let config = try NotificationConfigFile.decode(written)
-        #expect(config.relayURL == "https://heeler-apns.bybee.dev")
+        #expect(await transport.replacedNotificationRegistrations.isEmpty)
+        #expect(await transport.replacedNotificationConfigs.isEmpty)
+        #expect(try keys.record(forHost: host.id) == nil)
+        guard case .failed = store.states[host.id] else {
+            Issue.record("expected a visible routing failure")
+            return
+        }
+    }
+
+    @Test func invalidSettingsDoNotChangeExistingRegistrationOrKey() async throws {
+        let transport = ScriptedTransport()
+        let settings = NotificationRelaySettings(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        settings.rawValue = "https://relay.example.com"
+        let store = makeStore(transport: transport, relayRoute: { settings.route })
+        await store.refresh()
+        await store.setNotificationsEnabled(true, for: host)
+        let before = await transport.notificationRegistration
+        let key = try keys.record(forHost: host.id)
+        settings.rawValue = "relay.example.com"
+        await store.setDoneEnabled(false, for: host)
+        #expect(await transport.notificationRegistration == before)
+        #expect(try keys.record(forHost: host.id) == key)
+        #expect(await transport.replacedNotificationRegistrations.count == 1)
+    }
+
+    @Test func disabledRouteStillRefreshesAndDeliberatelyRemovesAnExistingRegistration()
+        async throws
+    {
+        let transport = ScriptedTransport()
+        try await NotificationRegistrationCeremony(keys: keys).register(
+            hostID: host.id, hostName: host.displayName, deviceToken: token,
+            route: .custom(URL(string: "https://relay.example.com")!), over: transport)
+        let client = ScriptedPushRegistrationClient()
+        client.status = .authorized
+        let push = PushRegistrationStore(
+            client: client, environment: .sandbox, relayRoute: { .disabled })
+        let store = NotificationPreferencesStore(
+            transports: ScriptedTransportProvider(transports: [host.id: transport]),
+            deviceToken: { push.deviceToken },
+            relayRoute: { .disabled },
+            ceremony: NotificationRegistrationCeremony(keys: keys))
+        store.setHosts([host])
+
+        await push.refresh()
+        push.deviceTokenDidArrive(Data([0x0a, 0x1b, 0x2c, 0x3d]))
+        await store.refresh()
+
+        #expect(store.states[host.id] == .idle(.init(isRegistered: true, notify: .init())))
+        #expect(store.confirmedTriggers(for: host.id) == NotificationTriggerPreferences())
+        #expect(await transport.replacedNotificationRegistrations.count == 1)
+
+        await store.setNotificationsEnabled(false, for: host)
+
+        let file = try NotificationRegistrationFile.decode(
+            await transport.notificationRegistration)
+        #expect(!file.containsDevice(token: token.hex))
+        #expect(try keys.record(forHost: host.id) == nil)
+        #expect(store.states[host.id] == .idle(.init(isRegistered: false, notify: .init())))
     }
 
     // MARK: Done flag

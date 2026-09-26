@@ -4,19 +4,12 @@
 
 # Heeler
 
-<a href="https://testflight.apple.com/join/aXSxRn4r"><img src="docs/images/testflight-badge-zh.svg" alt="在 TestFlight 下载" height="40" /></a>
-<a href="https://apps.apple.com/us/app/heeler-for-herdr/id6797263135"><img src="https://toolbox.marketingtools.apple.com/api/badges/download-on-the-app-store/black/zh-cn?size=250x83" alt="在 App Store 下载" height="40" /></a>
-
 **[herdr](https://herdr.dev) 的原生 iOS 伴侣应用 —— herdr 是一个 agent 优先的终端运行时。**
 
-[![GitHub stars](https://img.shields.io/github/stars/ZingerLittleBee/Heeler?style=flat-square&color=E8B923&logo=github&logoColor=white)](https://github.com/ZingerLittleBee/Heeler/stargazers)
-[![CI](https://img.shields.io/github/actions/workflow/status/ZingerLittleBee/Heeler/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/ZingerLittleBee/Heeler/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/SiNiSon-99/Heeler/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/SiNiSon-99/Heeler/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-6F42C1?style=flat-square)](LICENSE)
 [![Swift](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white&style=flat-square)](https://www.swift.org)
 [![iOS](https://img.shields.io/badge/iOS-18%2B-000000?logo=apple&logoColor=white&style=flat-square)](https://developer.apple.com/ios/)
-[![App Store](https://img.shields.io/badge/App_Store-available-0D96F6?logo=apple&logoColor=white&style=flat-square)](https://apps.apple.com/us/app/heeler-for-herdr/id6797263135)
-
-<a href="https://trendshift.io/repositories/151670?utm_source=repository-badge&amp;utm_medium=badge&amp;utm_campaign=badge-repository-151670" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/151670" alt="ZingerLittleBee%2FHeeler | Trendshift" width="250" height="55"/></a>
 
 [English](./README.md) | 简体中文
 
@@ -25,6 +18,8 @@
 ---
 
 Heeler 是一个 **agent 控制台**：把所有机器上正在运行的 coding agent 汇成一个原生仪表盘，按「谁需要你」排序。打开一个 Agent 即可阅读并操控它的实时终端，在原生 Composer 里用完整的 iOS 键盘起草，一次 Send 投递完整消息 —— 全程只走普通 SSH。
+
+这是独立维护中的分支，目前没有本分支发布的 iOS 构建或推送中继。前台 SSH 控制台不需要中继；通知和实时活动默认关闭，只有配置有效的自定义中继后才能启用。原版 Heeler 中继地址会被拒绝，已有 Host 注册文件和密钥保留到明确移除时。
 
 ## 截图
 
@@ -83,7 +78,7 @@ herdr —— 不改服务器、不装额外软件包。SSH 服务器需允许 st
 —— macOS 上是 **系统设置 > 通用 > 共享 > 远程登录**）：
 
 ```bash
-herdr plugin install ZingerLittleBee/Heeler/plugin --ref main --yes
+herdr plugin install SiNiSon-99/Heeler/plugin --ref REVIEWED_COMMIT_SHA --yes
 herdr plugin action invoke heeler.pair
 ```
 
@@ -105,4 +100,4 @@ host key 指纹和 SSH 密钥注册全部由配对码承载。在应用里为该
 
 ## 状态
 
-已在 [App Store](https://apps.apple.com/us/app/heeler-for-herdr/id6797263135) 上发布；部分国家和地区尚未上架，可以继续使用 [TestFlight](https://testflight.apple.com/join/aXSxRn4r)。以个人日常使用打磨为先，仍有粗糙之处，迭代较快。与 herdr 项目无隶属关系。
+这是尚未发布到 TestFlight 或 App Store 的独立分支。原项目的下载链接不是本分支的构建。原作者署名和 Apache 2.0 许可保留在仓库历史与 [LICENSE](LICENSE) 中。本分支与 herdr 项目无隶属关系。

@@ -35,8 +35,7 @@ struct NotificationSettingsView: View {
             // PRIVACY.md.
             privacySection
 
-            // Custom Push Relay base URL (#76): only meaningful to a
-            // self-builder; empty leaves every Host's plugin config alone.
+            // Push remains off until a usable custom relay is configured.
             // Last on purpose — it is the one section most users never touch.
             customRelaySection
         }
@@ -53,7 +52,9 @@ struct NotificationSettingsView: View {
         // after the user reads the explainer and taps Continue.
         .sheet(isPresented: $isShowingExplainer) {
             NotificationExplainerSheet {
-                Task { await pushRegistration.enable() }
+                if relaySettings.route.usableURL != nil {
+                    Task { await pushRegistration.enable() }
+                }
             }
         }
     }
@@ -72,6 +73,10 @@ struct NotificationSettingsView: View {
             Button("Enable Notifications") {
                 isShowingExplainer = true
             }
+            .disabled(relaySettings.route.usableURL == nil)
+        case .routingUnavailable:
+            Text("Push is off until you set a valid custom Push Relay URL.")
+                .foregroundStyle(.secondary)
         case .waitingForToken:
             HStack {
                 Text("Registering with Apple")
@@ -105,8 +110,11 @@ struct NotificationSettingsView: View {
                 Text("Could not register for push notifications. \(message)")
                     .foregroundStyle(.secondary)
                 Button("Try Again") {
-                    Task { await pushRegistration.enable() }
+                    if relaySettings.route.usableURL != nil {
+                        Task { await pushRegistration.enable() }
+                    }
                 }
+                .disabled(relaySettings.route.usableURL == nil)
             }
         }
     }
@@ -159,7 +167,7 @@ struct NotificationSettingsView: View {
                             enabled, for: host)
                     }
                 }))
-            .disabled(isUpdating)
+            .disabled(isUpdating || (enabledRouteUnavailable && !settings.isRegistered))
         if settings.isRegistered {
             Toggle(
                 "Done Notifications",
@@ -170,13 +178,13 @@ struct NotificationSettingsView: View {
                             await notificationPreferences.setDoneEnabled(enabled, for: host)
                         }
                     }))
-                .disabled(isUpdating)
+                .disabled(isUpdating || enabledRouteUnavailable)
             Toggle(
                 "Live Activity",
                 isOn: Binding(
                     get: { liveActivities.isEnabled(for: host.id) },
                     set: { liveActivities.setEnabled($0, for: host.id) }))
-                .disabled(isUpdating)
+                .disabled(isUpdating || (enabledRouteUnavailable && !liveActivities.isEnabled(for: host.id)))
         }
     }
 
@@ -191,6 +199,10 @@ struct NotificationSettingsView: View {
             }
         }()
         VStack(alignment: .leading, spacing: 6) {
+            if enabledRouteUnavailable {
+                Text("Push is off. Set a valid custom Push Relay URL to enable new registrations. Existing Host settings are preserved until you disable them deliberately.")
+                    .foregroundStyle(.orange)
+            }
             if registered {
                 Text(NotificationPrivacyCopy.liveActivityFooter)
                 if !liveActivities.areActivitiesEnabled {
@@ -209,6 +221,10 @@ struct NotificationSettingsView: View {
                     .foregroundStyle(.red)
             }
         }
+    }
+
+    private var enabledRouteUnavailable: Bool {
+        relaySettings.route.usableURL == nil
     }
 
     @ViewBuilder
@@ -230,14 +246,14 @@ struct NotificationSettingsView: View {
     private var customRelaySection: some View {
         Section {
             TextField(
-                NotificationRelayEndpoint.productionBaseURLString,
+                "https://your-relay.example",
                 text: $relaySettings.rawValue)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .keyboardType(.URL)
                 .textContentType(.URL)
             if relaySettings.hasInvalidEntry {
-                Text("Enter a valid HTTP or HTTPS URL.")
+                Text("Enter a valid custom HTTP or HTTPS URL. Original Heeler relays are unavailable.")
                     .font(.caption)
                     .foregroundStyle(.red)
             } else if relaySettings.hasInsecureHTTPEntry {
@@ -252,7 +268,7 @@ struct NotificationSettingsView: View {
             Text("Custom Push Relay")
         } footer: {
             Text(
-                "Leave blank to use \(NotificationRelayEndpoint.productionBaseURLString). "
+                "Leave blank to keep push off. Existing Host registrations and keys are preserved. "
                     + NotificationPrivacyCopy.customRelayCaveat)
         }
     }

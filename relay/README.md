@@ -1,6 +1,6 @@
 # herdr Push Relay
 
-The developer-hosted, stateless forwarder for Agent Notifications (ADR 0008)
+The stateless forwarder for Agent Notifications (ADR 0008)
 and per-Host Live Activity updates (`docs/agents/live-activity-contract.md`).
 The plugin encrypts a payload with the per-host Notification Key and POSTs it
 here; the relay signs the APNs provider JWT with the deploy-time `.p8`,
@@ -12,10 +12,10 @@ It is a dumb pipe on purpose:
   credential and in-flight device tokens, source IPs, APNs environment,
   collapse identifiers, request metadata, and ciphertext. It still cannot
   decrypt notification content because it never receives Notification Keys.
-- **Production origin**: the official app and plugin default to
-  `https://heeler-apns.bybee.dev`. Both still accept a custom relay base URL
-  for self-built apps whose APNs credentials are authorized for their bundle
-  ID.
+- **Explicit origin**: the app and plugin have no default relay. Push stays
+  disabled until an explicit custom relay base URL is configured, and the
+  original Heeler operator's hosts are rejected. The relay's APNs credentials
+  must be authorized for the app's bundle ID.
 - **What crosses it**: the request carries the device token, APNs environment,
   ciphertext, and (on the alert path) an opaque collapse identifier. Live
   Activity requests also carry the agent **counts**, the **event**
@@ -119,11 +119,10 @@ rate-limit windows.
 
 ## Deploy
 
-The production Worker is deployed at `https://heeler-apns.bybee.dev`. Its
-custom domain is declared in `wrangler.toml`, keeping deploys on the canonical
-origin and disabling the fallback `workers.dev` route. The retired
-`herdr-apns.bybee.dev` still routes to the same Worker while deployed plugins
-migrate off it; see the comment on that route in `wrangler.toml`.
+No deployment is configured for this fork. The routes in `wrangler.toml`
+still name the original operator's domains (`heeler-apns.bybee.dev`,
+`herdr-apns.bybee.dev`), which the app and plugin reject as relay URLs; point
+them at your own domain before deploying.
 
 1. In the Apple Developer portal, create an APNs auth key (`.p8`) for the
    team that signs the app; note the key id and team id.
@@ -133,7 +132,7 @@ migrate off it; see the comment on that route in `wrangler.toml`.
    uncomment them in `wrangler.toml` or set them in the dashboard).
 4. `npx wrangler secret put APNS_KEY_P8` and paste the `.p8` PEM contents.
 5. Smoke-test with a sandbox token:
-   `curl -s -X POST https://heeler-apns.bybee.dev/push -d '{"token":"<hex>","env":"sandbox","envelope":"{}","collapse":"smoke"}'`
+   `curl -s -X POST https://<your-relay>/push -d '{"token":"<hex>","env":"sandbox","envelope":"{}","collapse":"smoke"}'`
    — expect an APNs verdict (`200` or a relayed `400 BadDeviceToken`), not
    `relay_misconfigured`.
 

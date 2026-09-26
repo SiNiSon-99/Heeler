@@ -2,7 +2,7 @@ import Foundation
 
 /// The plugin-side `notify.json` config file (`plugin/README.md`) as this app
 /// reads and rewrites it. The app owns exactly one field — `relay_url`, the
-/// custom Push Relay base URL a self-builder points their plugin at (#76) —
+/// explicit custom Push Relay base URL the plugin posts to (#76) —
 /// but the plugin owns others (`debounce_ms`, `retry_delay_ms`) and future
 /// revisions may add more, so every field this app does not understand is
 /// carried verbatim through a rewrite, exactly like a foreign device entry in

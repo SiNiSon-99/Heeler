@@ -421,12 +421,13 @@ async function deliver(config, device, plaintextObject, request) {
 async function main() {
   const configDir = requireEnv("HERDR_PLUGIN_CONFIG_DIR");
   refreshSidebarSnapshotForEvent(configDir);
+  const config = readNotificationConfig(configDir);
+  if (!config.relayUrl) return;
   const eventJson = requireEnv("HERDR_PLUGIN_EVENT_JSON");
   const stateDir = requireEnv("HERDR_PLUGIN_STATE_DIR");
   const binPath = requireEnv("HERDR_BIN_PATH");
 
   const event = parseStatusEvent(eventJson);
-  const config = readNotificationConfig(configDir);
 
   // Cheap exits before burning a debounce process on a no-op.
   if (readActivityDevices(configDir).length === 0) return;

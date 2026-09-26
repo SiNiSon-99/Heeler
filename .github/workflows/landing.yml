@@ -1,28 +1,15 @@
-# Build and deploy the landing page (landing/) to Cloudflare Workers.
+# Validate the inherited landing page. Deployment is inactive in this fork.
 #
 # This is the only workflow a landing-only change runs. ci.yml (iOS) and
 # ci-node.yml (plugin / relay / codegen) use positive path filters that do
 # not include landing/**, so a copy edit never spends a macOS runner.
 #
-# A pull request builds and typechecks; a push to main also deploys. The deploy
-# needs two repository secrets:
-#
-#   CLOUDFLARE_API_TOKEN    scoped to Workers Scripts:Edit on the account that
-#                           owns the bybee.dev zone (same account as relay/)
-#   CLOUDFLARE_ACCOUNT_ID   the Cloudflare account id
-#
-# wrangler comes from landing/package-lock.json rather than a third-party
-# action, so the deploying binary is the same one `npm run deploy` uses locally.
+# Pull requests build and typecheck. No main push or deploy job is configured.
 
 name: Landing
 
 on:
   pull_request:
-    paths:
-      - landing/**
-      - .github/workflows/landing.yml
-  push:
-    branches: [main]
     paths:
       - landing/**
       - .github/workflows/landing.yml
@@ -37,7 +24,7 @@ permissions:
 
 jobs:
   build:
-    name: Build & deploy
+    name: Build landing
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -58,12 +45,3 @@ jobs:
 
       - name: Build
         run: npm run build
-
-      # Only main deploys; a pull request stops at a verified build.
-      - name: Deploy to Cloudflare
-        if: github.event_name == 'push'
-        run: npx wrangler deploy
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          WRANGLER_SEND_METRICS: "false"

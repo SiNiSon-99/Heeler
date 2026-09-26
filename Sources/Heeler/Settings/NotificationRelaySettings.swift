@@ -1,16 +1,7 @@
 import Foundation
 import Observation
 
-/// The app-side custom Push Relay base URL (#76, ADR 0008). A self-builder who
-/// ships their own bundle id and APNs key can point every Host's plugin at
-/// their own relay instead of the developer-hosted default; the value is
-/// written into each Host's `notify.json` at Notification Registration.
-///
-/// Empty means "use the production relay"; Notification Registration writes
-/// that endpoint to the Host so old plugin configurations converge on the
-/// current deployment. Only an http(s) base URL is accepted — a malformed
-/// entry yields no `URL`, so a typo never lands on a Host, and the settings
-/// screen can flag it instead.
+/// A relay is disabled until an explicit usable custom URL is supplied.
 @MainActor
 @Observable
 final class NotificationRelaySettings {
@@ -34,7 +25,7 @@ final class NotificationRelaySettings {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         let stored = defaults.string(forKey: Self.defaultsKey) ?? ""
-        if NotificationRelayEndpoint.isLegacyProductionBaseURL(stored) {
+        if NotificationRelayEndpoint.isOriginal(stored) {
             rawValue = ""
             defaults.removeObject(forKey: Self.defaultsKey)
         } else {
@@ -42,16 +33,22 @@ final class NotificationRelaySettings {
         }
     }
 
-    /// A validated custom base URL, or nil when the field is empty or
-    /// malformed. Registration resolves nil to the production endpoint.
+    var route: NotificationRelayRoute {
+        if rawValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return .disabled
+        }
+        guard let url = Self.validate(rawValue) else { return .invalid }
+        return .custom(url)
+    }
+
     var relayURL: URL? {
-        Self.validate(rawValue)
+        route.usableURL
     }
 
     /// Whether the current text is non-empty but not a usable relay URL, so the
     /// settings screen can flag a typo instead of silently ignoring it.
     var hasInvalidEntry: Bool {
-        !rawValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && relayURL == nil
+        route == .invalid
     }
 
     /// HTTP remains available for a relay running on the developer's machine,
@@ -61,20 +58,13 @@ final class NotificationRelaySettings {
         relayURL?.scheme?.lowercased() == "http"
     }
 
-    /// Parses a custom relay base URL: an absolute http(s) URL with a host and
-    /// no query or fragment. A path prefix is allowed (the relay may be
-    /// deployed under a subpath); the plugin appends `/push` to whatever base
-    /// it is given, so a query or fragment would only be a mistake.
+    /// Parses a custom relay base URL: an absolute http(s) URL with a host, no
+    /// credentials, query, or fragment, and not an original Heeler operator
+    /// host (`NotificationRelayEndpoint.validate`). A path prefix is allowed
+    /// (the relay may be deployed under a subpath); the plugin appends `/push`
+    /// to whatever base it is given, so a query or fragment would only be a
+    /// mistake.
     static func validate(_ text: String) -> URL? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty,
-            let components = URLComponents(string: trimmed),
-            let scheme = components.scheme?.lowercased(),
-            scheme == "http" || scheme == "https",
-            let host = components.host, !host.isEmpty,
-            components.query == nil, components.fragment == nil,
-            let url = components.url
-        else { return nil }
-        return url
+        NotificationRelayEndpoint.validate(text)
     }
 }

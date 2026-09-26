@@ -49,12 +49,12 @@ struct NotificationPrivacyCopyTests {
         #expect(cannot.localizedCaseInsensitiveContains("Notification Key"))
     }
 
-    @Test func statesTheSelfBuiltAppCaveat() {
+    @Test func statesTheForkRelayCaveat() {
         let caveat = NotificationPrivacyCopy.customRelayCaveat
-        #expect(caveat.localizedCaseInsensitiveContains("build and sign yourself"))
+        #expect(caveat.localizedCaseInsensitiveContains("disabled"))
         #expect(caveat.localizedCaseInsensitiveContains("bundle id"))
         #expect(caveat.localizedCaseInsensitiveContains("APNs credentials"))
-        #expect(caveat.localizedCaseInsensitiveContains("App Store"))
+        #expect(caveat.localizedCaseInsensitiveContains("No relay is supplied"))
     }
 
     @Test func linksToThePrivacyPolicy() throws {

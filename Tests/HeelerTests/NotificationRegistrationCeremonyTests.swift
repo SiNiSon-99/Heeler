@@ -12,6 +12,7 @@ struct NotificationRegistrationCeremonyTests {
     }
     private let hostID = UUID()
     private let token = APNSDeviceToken(hex: "0a1b2c3d", environment: .sandbox)
+    private var testRoute: NotificationRelayRoute { .custom(URL(string: "https://relay.example.com")!) }
 
     @Test func registerWritesAConformantEntryAndPersistsTheKey() async throws {
         let transport = ScriptedTransport()
@@ -19,7 +20,7 @@ struct NotificationRegistrationCeremonyTests {
         let record = try await ceremony.register(
             hostID: hostID, hostName: "mac-studio", deviceToken: token,
             notify: NotificationTriggerPreferences(blocked: true, done: false),
-            over: transport)
+            route: testRoute, over: transport)
 
         #expect(try keys.record(forHost: hostID) == record)
         #expect(record.key.count == 32)
@@ -40,9 +41,10 @@ struct NotificationRegistrationCeremonyTests {
         let transport = ScriptedTransport()
 
         let first = try await ceremony.register(
-            hostID: hostID, hostName: "mac-studio", deviceToken: token, over: transport)
+            hostID: hostID, hostName: "mac-studio", deviceToken: token, route: testRoute, over: transport)
         let second = try await ceremony.register(
-            hostID: hostID, hostName: "mac-studio", deviceToken: token, over: transport)
+            hostID: hostID, hostName: "mac-studio", deviceToken: token,
+            route: testRoute, over: transport)
 
         #expect(second.key == first.key)
         #expect(try keys.allRecords().count == 1)
@@ -61,7 +63,7 @@ struct NotificationRegistrationCeremonyTests {
                     + #""notify":{"blocked":true,"done":true},"extra":"kept"}]}"#).utf8))
 
         try await ceremony.register(
-            hostID: hostID, hostName: "mac-studio", deviceToken: token, over: transport)
+            hostID: hostID, hostName: "mac-studio", deviceToken: token, route: testRoute, over: transport)
 
         let written = try #require(await transport.notificationRegistration)
         let file = try NotificationRegistrationFile.decode(written)
@@ -78,7 +80,7 @@ struct NotificationRegistrationCeremonyTests {
         await transport.setNotificationRegistration(
             Data(#"{"v":1,"devices":[{"token":"ffff","key":"kk","env":"production"}]}"#.utf8))
         try await ceremony.register(
-            hostID: hostID, hostName: "mac-studio", deviceToken: token, over: transport)
+            hostID: hostID, hostName: "mac-studio", deviceToken: token, route: testRoute, over: transport)
 
         try await ceremony.remove(hostID: hostID, deviceToken: token, over: transport)
 
@@ -120,7 +122,7 @@ struct NotificationRegistrationCeremonyTests {
 
         await #expect(throws: NotificationRegistrationError.pluginNotInstalled) {
             try await ceremony.register(
-                hostID: hostID, hostName: "mac-studio", deviceToken: token, over: transport)
+                hostID: hostID, hostName: "mac-studio", deviceToken: token, route: testRoute, over: transport)
         }
 
         #expect(await transport.replacedNotificationRegistrations.isEmpty)
@@ -128,20 +130,34 @@ struct NotificationRegistrationCeremonyTests {
 
     @Test func writeFailureSurfacesAndKeepsTheLocalKeyForRetry() async throws {
         let transport = ScriptedTransport()
+        await transport.setNotificationConfig(
+            Data(#"{"relay_url":"https://relay.example.com"}"#.utf8))
         await transport.setNotificationRegistrationWriteFailure(
             .writeFailed(detail: "disk full"))
 
         await #expect(throws: NotificationRegistrationError.writeFailed(detail: "disk full")) {
             try await ceremony.register(
-                hostID: hostID, hostName: "mac-studio", deviceToken: token, over: transport)
+                hostID: hostID, hostName: "mac-studio", deviceToken: token, route: testRoute, over: transport)
         }
 
         // The key survives so the retry re-offers the same key to the Host.
         let record = try #require(try keys.record(forHost: hostID))
         await transport.setNotificationRegistrationWriteFailure(nil)
         let retried = try await ceremony.register(
-            hostID: hostID, hostName: "mac-studio", deviceToken: token, over: transport)
+            hostID: hostID, hostName: "mac-studio", deviceToken: token, route: testRoute, over: transport)
         #expect(retried.key == record.key)
+    }
+
+    @Test func relayConfigurationFailureDoesNotWriteAKeyOrRegistration() async throws {
+        let transport = ScriptedTransport()
+        await transport.setNotificationRegistrationWriteFailure(.writeFailed(detail: "disk full"))
+        await #expect(throws: NotificationRegistrationError.writeFailed(detail: "disk full")) {
+            try await ceremony.register(
+                hostID: hostID, hostName: "mac-studio", deviceToken: token,
+                route: testRoute, over: transport)
+        }
+        #expect(await transport.replacedNotificationRegistrations.isEmpty)
+        #expect(try keys.record(forHost: hostID) == nil)
     }
 
     @Test func aNewerFileVersionRefusesToRegister() async throws {
@@ -150,7 +166,7 @@ struct NotificationRegistrationCeremonyTests {
 
         await #expect(throws: NotificationRegistrationError.unsupportedFileVersion(2)) {
             try await ceremony.register(
-                hostID: hostID, hostName: "mac-studio", deviceToken: token, over: transport)
+                hostID: hostID, hostName: "mac-studio", deviceToken: token, route: testRoute, over: transport)
         }
 
         #expect(await transport.replacedNotificationRegistrations.isEmpty)
@@ -158,15 +174,16 @@ struct NotificationRegistrationCeremonyTests {
 
     // MARK: Custom relay URL (#76)
 
-    @Test func registerWithoutAnOverrideWritesTheProductionRelay() async throws {
+    @Test func registerWithoutARelayHasNoSideEffects() async throws {
         let transport = ScriptedTransport()
-
-        try await ceremony.register(
-            hostID: hostID, hostName: "mac-studio", deviceToken: token, over: transport)
-
-        let written = try #require(await transport.notificationConfig)
-        let config = try NotificationConfigFile.decode(written)
-        #expect(config.relayURL == "https://heeler-apns.bybee.dev")
+        await #expect(throws: NotificationRegistrationError.relayUnavailable) {
+            try await ceremony.register(
+                hostID: hostID, hostName: "mac-studio", deviceToken: token,
+                over: transport)
+        }
+        #expect(await transport.replacedNotificationRegistrations.isEmpty)
+        #expect(await transport.replacedNotificationConfigs.isEmpty)
+        #expect(try keys.record(forHost: hostID) == nil)
     }
 
     @Test func registerWithARelayURLWritesItPreservingOtherFields() async throws {
@@ -177,7 +194,7 @@ struct NotificationRegistrationCeremonyTests {
 
         try await ceremony.register(
             hostID: hostID, hostName: "mac-studio", deviceToken: token,
-            relayBaseURL: URL(string: "https://relay.example.com")!, over: transport)
+            route: testRoute, over: transport)
 
         let written = try #require(await transport.replacedNotificationConfigs.last)
         let object = try #require(
@@ -193,37 +210,36 @@ struct NotificationRegistrationCeremonyTests {
 
         try await ceremony.register(
             hostID: hostID, hostName: "mac-studio", deviceToken: token,
-            relayBaseURL: relay, over: transport)
+            route: .custom(relay), over: transport)
         try await ceremony.register(
             hostID: hostID, hostName: "mac-studio", deviceToken: token,
-            relayBaseURL: relay, over: transport)
+            route: .custom(relay), over: transport)
 
         // First register writes the config once; the second changes nothing.
         #expect(await transport.replacedNotificationConfigs.count == 1)
     }
 
-    // Driven by the endpoint list itself, so retiring another production
-    // endpoint cannot ship without its migration being covered.
-    @Test(arguments: NotificationRelayEndpoint.legacyProductionBaseURLStrings)
-    func registerMigratesAPreviousProductionRelay(_ legacy: String) async throws {
+    @Test(arguments: NotificationRelayEndpoint.originalBaseURLStrings)
+    func registerRejectsOriginalRelayWithoutWriting(_ original: String) async throws {
         let transport = ScriptedTransport()
+        let existing = Data(#"{"relay_url":"\#(original)","future":"keep"}"#.utf8)
         await transport.setNotificationConfig(
-            Data(#"{"relay_url":"\#(legacy)"}"#.utf8))
-
-        try await ceremony.register(
-            hostID: hostID, hostName: "mac-studio", deviceToken: token,
-            relayBaseURL: URL(string: legacy),
-            over: transport)
-
-        let written = try #require(await transport.notificationConfig)
-        let config = try NotificationConfigFile.decode(written)
-        #expect(config.relayURL == NotificationRelayEndpoint.productionBaseURLString)
+            existing)
+        await #expect(throws: NotificationRegistrationError.relayUnavailable) {
+            try await ceremony.register(
+                hostID: hostID, hostName: "mac-studio", deviceToken: token,
+                route: .custom(URL(string: original)!), over: transport)
+        }
+        #expect(await transport.notificationConfig == existing)
+        #expect(await transport.replacedNotificationRegistrations.isEmpty)
+        #expect(await transport.replacedNotificationConfigs.isEmpty)
+        #expect(try keys.record(forHost: hostID) == nil)
     }
 
     @Test func removeSurfacesAFailedRemoteRemovalAndKeepsTheKey() async throws {
         let transport = ScriptedTransport()
         try await ceremony.register(
-            hostID: hostID, hostName: "mac-studio", deviceToken: token, over: transport)
+            hostID: hostID, hostName: "mac-studio", deviceToken: token, route: testRoute, over: transport)
         await transport.setNotificationRegistrationWriteFailure(
             .writeFailed(detail: "read-only"))
 
@@ -238,11 +254,11 @@ struct NotificationRegistrationCeremonyTests {
     @Test func setLiveActivityTokenWritesTheFieldOnARegisteredDevice() async throws {
         let transport = ScriptedTransport()
         try await ceremony.register(
-            hostID: hostID, hostName: "mac-studio", deviceToken: token, over: transport)
+            hostID: hostID, hostName: "mac-studio", deviceToken: token, route: testRoute, over: transport)
         let started = Date(timeIntervalSince1970: 1_700_000_000)
 
         try await ceremony.setLiveActivityToken(
-            tokenHex: "deadbeef", startedAt: started, deviceToken: token, over: transport)
+            tokenHex: "deadbeef", startedAt: started, deviceToken: token, route: testRoute, over: transport)
 
         let file = try NotificationRegistrationFile.decode(
             await transport.notificationRegistration)
@@ -252,6 +268,21 @@ struct NotificationRegistrationCeremonyTests {
         #expect(file.containsDevice(token: token.hex))
     }
 
+    @Test func invalidRouteCannotWriteALiveActivityToken() async throws {
+        let transport = ScriptedTransport()
+        try await ceremony.register(
+            hostID: hostID, hostName: "mac-studio", deviceToken: token,
+            route: testRoute, over: transport)
+        let existing = await transport.notificationRegistration
+        await #expect(throws: NotificationRegistrationError.relayUnavailable) {
+            try await ceremony.setLiveActivityToken(
+                tokenHex: "deadbeef", startedAt: Date(), deviceToken: token,
+                route: .invalid, over: transport)
+        }
+        #expect(await transport.notificationRegistration == existing)
+        #expect(await transport.replacedNotificationRegistrations.count == 1)
+    }
+
     @Test func setLiveActivityTokenFailsClosedWhenTheDeviceIsNotRegistered() async throws {
         let transport = ScriptedTransport()
 
@@ -259,7 +290,7 @@ struct NotificationRegistrationCeremonyTests {
             try await ceremony.setLiveActivityToken(
                 tokenHex: "deadbeef",
                 startedAt: Date(timeIntervalSince1970: 1_700_000_000),
-                deviceToken: token, over: transport)
+                deviceToken: token, route: testRoute, over: transport)
         }
 
         #expect(await transport.replacedNotificationRegistrations.isEmpty)
@@ -268,11 +299,11 @@ struct NotificationRegistrationCeremonyTests {
     @Test func clearLiveActivityTokenDropsOnlyThatField() async throws {
         let transport = ScriptedTransport()
         try await ceremony.register(
-            hostID: hostID, hostName: "mac-studio", deviceToken: token, over: transport)
+            hostID: hostID, hostName: "mac-studio", deviceToken: token, route: testRoute, over: transport)
         try await ceremony.setLiveActivityToken(
             tokenHex: "deadbeef",
             startedAt: Date(timeIntervalSince1970: 1_700_000_000),
-            deviceToken: token, over: transport)
+            deviceToken: token, route: testRoute, over: transport)
 
         try await ceremony.clearLiveActivityToken(deviceToken: token, over: transport)
 
@@ -286,12 +317,12 @@ struct NotificationRegistrationCeremonyTests {
     @Test func setLiveActivityTokenWritesPinnedPaneIDs() async throws {
         let transport = ScriptedTransport()
         try await ceremony.register(
-            hostID: hostID, hostName: "mac-studio", deviceToken: token, over: transport)
+            hostID: hostID, hostName: "mac-studio", deviceToken: token, route: testRoute, over: transport)
         let started = Date(timeIntervalSince1970: 1_700_000_000)
 
         try await ceremony.setLiveActivityToken(
             tokenHex: "deadbeef", startedAt: started, deviceToken: token,
-            pinnedPaneIDs: ["w1:p2", "w1:p1"], over: transport)
+            pinnedPaneIDs: ["w1:p2", "w1:p1"], route: testRoute, over: transport)
 
         let file = try NotificationRegistrationFile.decode(
             await transport.notificationRegistration)
@@ -301,14 +332,14 @@ struct NotificationRegistrationCeremonyTests {
     @Test func setLiveActivityPinnedPaneIDsUpdatesAnExistingField() async throws {
         let transport = ScriptedTransport()
         try await ceremony.register(
-            hostID: hostID, hostName: "mac-studio", deviceToken: token, over: transport)
+            hostID: hostID, hostName: "mac-studio", deviceToken: token, route: testRoute, over: transport)
         try await ceremony.setLiveActivityToken(
             tokenHex: "deadbeef",
             startedAt: Date(timeIntervalSince1970: 1_700_000_000),
-            deviceToken: token, over: transport)
+            deviceToken: token, route: testRoute, over: transport)
 
         try await ceremony.setLiveActivityPinnedPaneIDs(
-            ["w1:p9"], deviceToken: token, over: transport)
+            ["w1:p9"], deviceToken: token, route: testRoute, over: transport)
 
         let file = try NotificationRegistrationFile.decode(
             await transport.notificationRegistration)
@@ -321,7 +352,7 @@ struct NotificationRegistrationCeremonyTests {
         let transport = ScriptedTransport()
 
         try await ceremony.setLiveActivityPinnedPaneIDs(
-            ["w1:p1"], deviceToken: token, over: transport)
+            ["w1:p1"], deviceToken: token, route: testRoute, over: transport)
 
         #expect(await transport.replacedNotificationRegistrations.isEmpty)
     }

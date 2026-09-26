@@ -68,13 +68,16 @@ final class HeelerAppModel {
         inputMode = AgentInputModeSettings()
         let relaySettings = NotificationRelaySettings()
         self.relaySettings = relaySettings
+        pushRegistration.configureRelayRoute { [weak relaySettings] in
+            relaySettings?.route ?? .disabled
+        }
         // Preference reads/writes borrow the Console's live per-Host SSH
         // connections (#75); the token comes from push bootstrap (#71), and
         // the custom relay URL (#76) rides along into each Host's notify.json.
         let notificationPreferences = NotificationPreferencesStore(
             transports: console,
             deviceToken: { [weak pushRegistration] in pushRegistration?.deviceToken },
-            relayBaseURL: { [weak relaySettings] in relaySettings?.relayURL })
+            relayRoute: { [weak relaySettings] in relaySettings?.route ?? .disabled })
         self.notificationPreferences = notificationPreferences
         // The in-app foreground banner (#77): presented-Agent suppression
         // reads the key window's Agent at fire time; the preference gate
@@ -93,6 +96,7 @@ final class HeelerAppModel {
             controller: ActivityKitLiveActivityController(),
             preferences: LiveActivityPreferences(),
             transports: console,
+            relayRoute: { [weak relaySettings] in relaySettings?.route ?? .disabled },
             deviceToken: { [weak pushRegistration] in pushRegistration?.deviceToken },
             knownHostIDs: { [weak hostStore] in Set(hostStore?.hosts.map(\.id) ?? []) },
             hostDisplayName: { [weak hostStore] id in

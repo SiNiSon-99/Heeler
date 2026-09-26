@@ -1,0 +1,27 @@
+# Reviewable fork delivery settings. Gate-control commands and agent selection
+# become effective only after this file is merged to the trusted default branch.
+agent: claude
+pr:
+  base_branch: main
+providers:
+  github:
+    draft_pull_requests: false
+commands:
+  test: >-
+    make test-app TEST_FLAGS='-only-testing:HeelerTests/NotificationRelaySettingsTests
+    -only-testing:HeelerTests/NotificationPreferencesStoreTests
+    -only-testing:HeelerTests/NotificationRegistrationCeremonyTests
+    -only-testing:HeelerTests/HostLiveActivityCoordinatorTests
+    -only-testing:HeelerTests/NotificationPrivacyCopyTests
+    -only-testing:HeelerTests/PushRegistrationStoreTests
+    -only-testing:HeelerTests/SettingsViewTests'
+    && (cd plugin && npm ci && npm test)
+    && (cd relay && npm test)
+    && make verify-ssh-artifacts
+  lint: >-
+    git diff --check origin/main...HEAD
+    && swiftlint lint --quiet Sources/Heeler/Notifications/NotificationRelayEndpoint.swift
+    Sources/Heeler/Settings/NotificationRelaySettings.swift
+    && node --check plugin/src/notification-config.js
+    && node --check plugin/src/notify-hook.js
+    && node --check plugin/src/activity-hook.js

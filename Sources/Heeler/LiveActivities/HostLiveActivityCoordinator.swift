@@ -13,6 +13,7 @@ final class HostLiveActivityCoordinator {
 
     @ObservationIgnored private let controller: any LiveActivityControlling
     @ObservationIgnored private let transports: any NotificationTransportProvider
+    @ObservationIgnored private let relayRoute: @MainActor () -> NotificationRelayRoute
     @ObservationIgnored private let keys: NotificationKeyStore
     @ObservationIgnored private let ceremony: NotificationRegistrationCeremony
     @ObservationIgnored private let deviceToken: @MainActor () -> APNSDeviceToken?
@@ -43,6 +44,7 @@ final class HostLiveActivityCoordinator {
         controller: any LiveActivityControlling,
         preferences: LiveActivityPreferences,
         transports: any NotificationTransportProvider,
+        relayRoute: @escaping @MainActor () -> NotificationRelayRoute = { .disabled },
         keys: NotificationKeyStore = NotificationKeyStore(),
         ceremony: NotificationRegistrationCeremony? = nil,
         deviceToken: @escaping @MainActor () -> APNSDeviceToken?,
@@ -58,6 +60,7 @@ final class HostLiveActivityCoordinator {
         self.controller = controller
         self.preferences = preferences
         self.transports = transports
+        self.relayRoute = relayRoute
         self.keys = keys
         self.ceremony = ceremony ?? NotificationRegistrationCeremony(keys: keys)
         self.deviceToken = deviceToken
@@ -85,7 +88,7 @@ final class HostLiveActivityCoordinator {
         if enabled {
             apply(hostID)
         } else {
-            endNow(hostID)
+            endNow(hostID, deliberate: true)
         }
     }
 
@@ -142,13 +145,13 @@ final class HostLiveActivityCoordinator {
             controller.end(id: id, finalContent: nil, immediate: true)
             if sessions[hostID]?.id == id {
                 dropSession(hostID, endOnController: false)
-                enqueue(.clear, for: hostID)
+                enqueue(.clear(deliberate: false), for: hostID)
             }
         }
 
         for (hostID, session) in sessions where currentByID[session.id] == nil {
             dropSession(hostID, endOnController: false)
-            enqueue(.clear, for: hostID)
+            enqueue(.clear(deliberate: false), for: hostID)
         }
 
         for (id, hostID) in current where known.contains(hostID) && sessions[hostID] == nil {
@@ -202,6 +205,9 @@ final class HostLiveActivityCoordinator {
     // MARK: Desire / settle
 
     private func scheduleSettle(for hostID: Host.ID) {
+        if relayRoute().usableURL == nil {
+            reconcileNotes[hostID] = "idle — set a valid custom Push Relay URL"
+        }
         holdIfUnknown(hostID)
         if shouldDeferApply(for: hostID) {
             settleTasks[hostID]?.cancel()
@@ -233,7 +239,7 @@ final class HostLiveActivityCoordinator {
 
         guard let desired else {
             reconcileNotes[hostID] = "idle — \(desireBlocker(for: hostID))"
-            endNow(hostID)
+            endNow(hostID, deliberate: false)
             return
         }
         guard let key = notificationKey(for: hostID),
@@ -270,6 +276,7 @@ final class HostLiveActivityCoordinator {
     /// The gate that kept `computeDesired` from producing content, in the
     /// order the gates run — surfaced by the Settings diagnostic row.
     private func desireBlocker(for hostID: Host.ID) -> String {
+        if relayRoute().usableURL == nil { return "set a valid custom Push Relay URL" }
         if !controller.areEnabled { return "iOS has Live Activities disabled for Heeler" }
         if !preferences.isEnabled(for: hostID) { return "the per-Host toggle is off" }
         if deviceToken() == nil { return "no push device token yet" }
@@ -285,6 +292,7 @@ final class HostLiveActivityCoordinator {
     }
 
     private func computeDesired(for hostID: Host.ID) -> AgentActivityDesire? {
+        guard relayRoute().usableURL != nil else { return nil }
         guard controller.areEnabled else { return nil }
         guard preferences.isEnabled(for: hostID) else { return nil }
         guard deviceToken() != nil else { return nil }
@@ -394,15 +402,15 @@ final class HostLiveActivityCoordinator {
         case .dismissed, .ended:
             guard sessions[hostID] != nil else { return }
             dropSession(hostID, endOnController: false)
-            enqueue(.clear, for: hostID)
+            enqueue(.clear(deliberate: false), for: hostID)
         case .active, .stale:
             break
         }
     }
 
-    private func endNow(_ hostID: Host.ID) {
+    private func endNow(_ hostID: Host.ID, deliberate: Bool) {
         dropSession(hostID, endOnController: true)
-        enqueue(.clear, for: hostID)
+        enqueue(.clear(deliberate: deliberate), for: hostID)
         applied[hostID] = nil
     }
 
@@ -420,7 +428,7 @@ final class HostLiveActivityCoordinator {
     private enum TokenJob: Equatable {
         case set(hex: String, startedAt: Date)
         case setPreferences
-        case clear
+        case clear(deliberate: Bool)
     }
 
     private struct TokenPipe {
@@ -432,7 +440,8 @@ final class HostLiveActivityCoordinator {
     private func enqueue(_ job: TokenJob, for hostID: Host.ID) {
         var pipe = pipes[hostID] ?? TokenPipe()
         switch (pipe.pending, job) {
-        case (.some(.set), .setPreferences), (.some(.clear), .setPreferences):
+        case (.some(.set), .setPreferences), (.some(.clear), .setPreferences),
+            (.some(.clear(deliberate: true)), .clear):
             // A pending token write already includes current pins at
             // perform time; a pending clear drops live_activity entirely.
             break
@@ -470,6 +479,8 @@ final class HostLiveActivityCoordinator {
     }
 
     private func perform(_ job: TokenJob, hostID: Host.ID) async -> Bool {
+        let route = relayRoute()
+        if job != .clear(deliberate: true), route.usableURL == nil { return false }
         guard let token = deviceToken() else { return false }
         let pins = pinnedPaneIDs(hostID)
         let layout = rowLayout(hostID)
@@ -481,10 +492,12 @@ final class HostLiveActivityCoordinator {
                     try await ceremony.setLiveActivityToken(
                         tokenHex: hex, startedAt: startedAt, deviceToken: token,
                         pinnedPaneIDs: pins, rowLayout: layout, hostName: hostName,
+                        route: route,
                         over: transport)
                 case .setPreferences:
                     try await ceremony.setLiveActivityPinnedPaneIDs(
-                        pins, rowLayout: layout, hostName: hostName, deviceToken: token, over: transport)
+                        pins, rowLayout: layout, hostName: hostName, deviceToken: token,
+                        route: route, over: transport)
                 case .clear:
                     try await ceremony.clearLiveActivityToken(
                         deviceToken: token, over: transport)

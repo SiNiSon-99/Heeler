@@ -27,6 +27,7 @@ struct HostLiveActivityCoordinatorTests {
         var statuses: [UUID: EventsSessionStatus] = [:]
         var deviceToken: APNSDeviceToken?
         var layout: AgentRowLayout?
+        var relayRoute: NotificationRelayRoute = .custom(URL(string: "https://relay.example.com")!)
     }
 
     private func makeDefaults() throws -> (UserDefaults, cleanup: () -> Void) {
@@ -47,6 +48,7 @@ struct HostLiveActivityCoordinatorTests {
             controller: controller,
             preferences: LiveActivityPreferences(defaults: defaults),
             transports: ScriptedTransportProvider(transports: [host.id: transport]),
+            relayRoute: { world.relayRoute },
             keys: keys,
             ceremony: NotificationRegistrationCeremony(keys: keys),
             deviceToken: { world.deviceToken },
@@ -80,7 +82,8 @@ struct HostLiveActivityCoordinatorTests {
     private func registerDevice() async throws {
         let keys = NotificationKeyStore(secrets: secrets)
         try await NotificationRegistrationCeremony(keys: keys).register(
-            hostID: host.id, hostName: "mbp", deviceToken: token, over: transport)
+            hostID: host.id, hostName: "mbp", deviceToken: token,
+            route: .custom(URL(string: "https://relay.example.com")!), over: transport)
     }
 
     private func agent(
@@ -189,6 +192,97 @@ struct HostLiveActivityCoordinatorTests {
     }
 
     // MARK: Fail closed
+
+    @Test func unusableRelayPreventsNewActivityAndRemoteWrites() async throws {
+        let (defaults, cleanup) = try makeDefaults()
+        defer { cleanup() }
+        try await registerDevice()
+        armWorld()
+        let original = await transport.notificationRegistration
+        world.relayRoute = .invalid
+        let coordinator = makeCoordinator(defaults: defaults)
+        coordinator.start()
+        coordinator.agentsDidChange([agent(observedPaneID, .working)])
+        try await waitPastSettle()
+        #expect(controller.requested.isEmpty)
+        #expect(await transport.notificationRegistration == original)
+        #expect(await transport.replacedNotificationRegistrations.count == 1)
+        #expect(coordinator.reconcileNotes[host.id]?.contains("Push Relay URL") == true)
+    }
+
+    @Test func unusableRelayEndsLocallyAndOnlyADeliberateSwitchOffClears() async throws {
+        let (defaults, cleanup) = try makeDefaults()
+        defer { cleanup() }
+        try await registerDevice()
+        armWorld()
+        let coordinator = makeCoordinator(defaults: defaults)
+        coordinator.start()
+        coordinator.agentsDidChange([agent(observedPaneID, .working)])
+        try await waitUntil("the activity should start") { !controller.requestedHandles.isEmpty }
+        let activityID = try #require(controller.requestedHandles.first?.id)
+        controller.emitToken(id: activityID, Data([0x11]))
+        try await waitUntil("the token should be written") {
+            try await liveActivityToken() == "11"
+        }
+
+        world.relayRoute = .disabled
+        coordinator.agentsDidChange([agent(observedPaneID, .working)])
+        try await waitUntil("an unusable relay should end the activity locally") {
+            !controller.ended.isEmpty
+        }
+        try await waitPastSettle()
+        #expect(try await liveActivityToken() == "11")
+
+        coordinator.setEnabled(false, for: host.id)
+        try await waitUntil("switching off should clear the field without a usable relay") {
+            try await liveActivityToken() == nil
+        }
+    }
+
+    @Test func unusableRelayKeepsTheFieldAcrossDismissalAndReconcile() async throws {
+        let (defaults, cleanup) = try makeDefaults()
+        defer { cleanup() }
+        try await registerDevice()
+        armWorld()
+        let coordinator = makeCoordinator(defaults: defaults)
+        coordinator.start()
+        coordinator.agentsDidChange([agent(observedPaneID, .working)])
+        try await waitUntil("the activity should start") { !controller.requestedHandles.isEmpty }
+        let activityID = try #require(controller.requestedHandles.first?.id)
+        controller.emitToken(id: activityID, Data([0x22]))
+        try await waitUntil("the token should be written") {
+            try await liveActivityToken() == "22"
+        }
+
+        world.relayRoute = .invalid
+        controller.emitState(id: activityID, .dismissed)
+        try await waitPastSettle()
+        coordinator.connectionsDidChange()
+        try await waitPastSettle()
+        #expect(try await liveActivityToken() == "22")
+
+        world.relayRoute = .custom(URL(string: "https://relay.example.com")!)
+        coordinator.agentsDidChange([agent(observedPaneID, .blocked)])
+        try await waitUntil("the relaunched activity should start") {
+            controller.requestedHandles.count == 2
+        }
+        let secondID = try #require(controller.requestedHandles.last?.id)
+        controller.emitToken(id: secondID, Data([0x33]))
+        try await waitUntil("the second token should be written") {
+            try await liveActivityToken() == "33"
+        }
+
+        world.relayRoute = .disabled
+        controller.end(id: secondID, finalContent: nil, immediate: true)
+        coordinator.reconcile()
+        try await waitPastSettle()
+        #expect(try await liveActivityToken() == "33")
+
+        coordinator.setEnabled(false, for: host.id)
+        try await waitUntil("an explicit switch-off should still clear") {
+            try await liveActivityToken() == nil
+        }
+    }
 
     @Test func staysIdleWhenThePreferenceIsOff() async throws {
         let (defaults, cleanup) = try makeDefaults()

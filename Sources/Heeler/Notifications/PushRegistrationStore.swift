@@ -76,6 +76,8 @@ final class PushRegistrationStore {
         case unknown
         /// iOS has never asked; the permission prompt is still available.
         case needsPermission
+        /// No usable custom relay is configured; the permission prompt is withheld.
+        case routingUnavailable
         case denied
         /// Registration is in flight; the token callback has not fired yet.
         case waitingForToken
@@ -87,13 +89,20 @@ final class PushRegistrationStore {
 
     private let client: any PushRegistrationClient
     private let environment: APNSEnvironment
+    private var relayRoute: @MainActor () -> NotificationRelayRoute
 
     init(
         client: any PushRegistrationClient = SystemPushRegistrationClient(),
-        environment: APNSEnvironment = .current
+        environment: APNSEnvironment = .current,
+        relayRoute: @escaping @MainActor () -> NotificationRelayRoute = { .disabled }
     ) {
         self.client = client
         self.environment = environment
+        self.relayRoute = relayRoute
+    }
+
+    func configureRelayRoute(_ route: @escaping @MainActor () -> NotificationRelayRoute) {
+        relayRoute = route
     }
 
     /// The captured token, once APNs has answered.
@@ -121,6 +130,10 @@ final class PushRegistrationStore {
 
     /// The user-initiated step: show the iOS permission prompt, then register.
     func enable() async {
+        guard relayRoute().usableURL != nil else {
+            state = .routingUnavailable
+            return
+        }
         do {
             if try await client.requestAuthorization() {
                 state = .waitingForToken
