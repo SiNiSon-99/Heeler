@@ -48,9 +48,6 @@ struct NotificationSettingsView: View {
             guard token != nil else { return }
             Task { await notificationPreferences.refresh() }
         }
-        .onChange(of: relaySettings.rawValue) {
-            Task { await pushRegistration.refresh() }
-        }
         // The disclosure gate (#76): the iOS permission prompt only fires
         // after the user reads the explainer and taps Continue.
         .sheet(isPresented: $isShowingExplainer) {

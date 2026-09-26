@@ -239,6 +239,51 @@ struct HostLiveActivityCoordinatorTests {
         }
     }
 
+    @Test func unusableRelayKeepsTheFieldAcrossDismissalAndReconcile() async throws {
+        let (defaults, cleanup) = try makeDefaults()
+        defer { cleanup() }
+        try await registerDevice()
+        armWorld()
+        let coordinator = makeCoordinator(defaults: defaults)
+        coordinator.start()
+        coordinator.agentsDidChange([agent(observedPaneID, .working)])
+        try await waitUntil("the activity should start") { !controller.requestedHandles.isEmpty }
+        let activityID = try #require(controller.requestedHandles.first?.id)
+        controller.emitToken(id: activityID, Data([0x22]))
+        try await waitUntil("the token should be written") {
+            try await liveActivityToken() == "22"
+        }
+
+        world.relayRoute = .invalid
+        controller.emitState(id: activityID, .dismissed)
+        try await waitPastSettle()
+        coordinator.connectionsDidChange()
+        try await waitPastSettle()
+        #expect(try await liveActivityToken() == "22")
+
+        world.relayRoute = .custom(URL(string: "https://relay.example.com")!)
+        coordinator.agentsDidChange([agent(observedPaneID, .blocked)])
+        try await waitUntil("the relaunched activity should start") {
+            controller.requestedHandles.count == 2
+        }
+        let secondID = try #require(controller.requestedHandles.last?.id)
+        controller.emitToken(id: secondID, Data([0x33]))
+        try await waitUntil("the second token should be written") {
+            try await liveActivityToken() == "33"
+        }
+
+        world.relayRoute = .disabled
+        controller.end(id: secondID, finalContent: nil, immediate: true)
+        coordinator.reconcile()
+        try await waitPastSettle()
+        #expect(try await liveActivityToken() == "33")
+
+        coordinator.setEnabled(false, for: host.id)
+        try await waitUntil("an explicit switch-off should still clear") {
+            try await liveActivityToken() == nil
+        }
+    }
+
     @Test func staysIdleWhenThePreferenceIsOff() async throws {
         let (defaults, cleanup) = try makeDefaults()
         defer { cleanup() }
