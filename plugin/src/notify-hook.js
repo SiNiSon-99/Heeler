@@ -281,6 +281,7 @@ async function main() {
   const event = parseStatusEvent(eventJson);
   const timestamp = Math.floor(Date.now() / 1000);
   const config = readNotificationConfig(configDir);
+  if (!config.relayUrl) return;
   const notifyWorthy = event.status in NOTIFY_FLAG_BY_STATUS;
 
   // Cheap exits before burning a 5 s debounce process on a no-op.

@@ -50,6 +50,7 @@ on:
       - scripts/**
       - plugin/test-vectors/**
       - .github/workflows/ci.yml
+      - .no-mistakes.yaml
   push:
     branches: [main]
     paths:
@@ -62,6 +63,7 @@ on:
       - scripts/**
       - plugin/test-vectors/**
       - .github/workflows/ci.yml
+      - .no-mistakes.yaml
 
 # Per-workflow group: sharing `ci-${{ github.ref }}` with ci-node.yml made
 # the two workflows cancel each other on the same SHA (plugin/test-vectors

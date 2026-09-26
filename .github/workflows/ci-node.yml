@@ -27,6 +27,7 @@ on:
       - scripts/herdr-schema.json
       - Sources/Heeler/Transport/Generated/**
       - .github/workflows/ci-node.yml
+      - .no-mistakes.yaml
   push:
     branches: [main]
     paths:
@@ -36,6 +37,7 @@ on:
       - scripts/herdr-schema.json
       - Sources/Heeler/Transport/Generated/**
       - .github/workflows/ci-node.yml
+      - .no-mistakes.yaml
 
 # Per-workflow group so this can run alongside ci.yml on the same SHA
 # (plugin/test-vectors starts both). A new push still cancels a stale

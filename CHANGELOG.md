@@ -7,6 +7,10 @@ Entries reference the issue that motivated them.
 
 ## [Unreleased]
 
+### Changed
+
+- Push notifications and Live Activities now require an explicit valid custom relay. Blank, malformed, and original Heeler relay settings cannot register a device or send from the plugin; existing Host registration files and keys remain until deliberate removal. The independent fork's landing deployment is inactive while validation CI remains available. (PR pending: `fm/wmi-route-p3`)
+
 ### Fixed
 
 - Pairing names Tailscale SSH when it answers the Pairing Code's port

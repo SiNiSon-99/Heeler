@@ -53,21 +53,18 @@ final class NotificationPreferencesStore {
 
     private let transports: any NotificationTransportProvider
     private let deviceToken: @MainActor () -> APNSDeviceToken?
-    /// The app-side custom Push Relay base URL, read at write time so a change
-    /// in Settings lands on the next Host the user registers. `nil` — the
-    /// empty/default setting — leaves each Host's `notify.json` untouched (#76).
-    private let relayBaseURL: @MainActor () -> URL?
+    private let relayRoute: @MainActor () -> NotificationRelayRoute
     private let ceremony: NotificationRegistrationCeremony
 
     init(
         transports: any NotificationTransportProvider,
         deviceToken: @escaping @MainActor () -> APNSDeviceToken?,
-        relayBaseURL: @escaping @MainActor () -> URL? = { nil },
+        relayRoute: @escaping @MainActor () -> NotificationRelayRoute = { .disabled },
         ceremony: NotificationRegistrationCeremony = NotificationRegistrationCeremony()
     ) {
         self.transports = transports
         self.deviceToken = deviceToken
-        self.relayBaseURL = relayBaseURL
+        self.relayRoute = relayRoute
         self.ceremony = ceremony
     }
 
@@ -95,13 +92,19 @@ final class NotificationPreferencesStore {
         guard let settings = confirmedSettings(for: host.id),
             settings.isRegistered != enabled
         else { return }
-        let relay = relayBaseURL()
+        let route = relayRoute()
+        if enabled && route.usableURL == nil {
+            states[host.id] = .failed(
+                message: Self.message(for: NotificationRegistrationError.relayUnavailable),
+                settings: settings)
+            return
+        }
         await write(for: host, from: settings) { ceremony, token, transport in
             if enabled {
                 let notify = NotificationTriggerPreferences()
                 try await ceremony.register(
                     hostID: host.id, hostName: host.displayName,
-                    deviceToken: token, notify: notify, relayBaseURL: relay, over: transport)
+                    deviceToken: token, notify: notify, route: route, over: transport)
                 return HostSettings(isRegistered: true, notify: notify)
             } else {
                 try await ceremony.remove(
@@ -121,13 +124,19 @@ final class NotificationPreferencesStore {
         else { return }
         let notify = NotificationTriggerPreferences(
             blocked: settings.notify.blocked, done: enabled)
-        let relay = relayBaseURL()
+        let route = relayRoute()
+        guard route.usableURL != nil else {
+            states[host.id] = .failed(
+                message: Self.message(for: NotificationRegistrationError.relayUnavailable),
+                settings: settings)
+            return
+        }
         await write(for: host, from: settings) { ceremony, token, transport in
             // Re-registration is the flag update: it upserts this device's
             // entry reusing the stored Notification Key (#72 idempotence).
             try await ceremony.register(
                 hostID: host.id, hostName: host.displayName,
-                deviceToken: token, notify: notify, relayBaseURL: relay, over: transport)
+                deviceToken: token, notify: notify, route: route, over: transport)
             return HostSettings(isRegistered: true, notify: notify)
         }
     }
@@ -209,6 +218,8 @@ final class NotificationPreferencesStore {
 
     static func message(for error: any Error) -> String {
         switch error {
+        case NotificationRegistrationError.relayUnavailable:
+            "Set a valid custom Push Relay URL before enabling notifications."
         case NotificationRegistrationError.pluginNotInstalled:
             "Install the Heeler plugin on this Host, then check again."
         case NotificationRegistrationError.pluginProbeFailed:

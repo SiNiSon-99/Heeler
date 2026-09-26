@@ -4,19 +4,12 @@
 
 # Heeler
 
-<a href="https://testflight.apple.com/join/aXSxRn4r"><img src="docs/images/testflight-badge.svg" alt="Available on TestFlight" height="40" /></a>
-<a href="https://apps.apple.com/us/app/heeler-for-herdr/id6797263135"><img src="https://toolbox.marketingtools.apple.com/api/badges/download-on-the-app-store/black/en-us?size=250x83" alt="Download on the App Store" height="40" /></a>
-
 **A native iOS companion app for [herdr](https://herdr.dev) — an agent-first terminal runtime.**
 
-[![GitHub stars](https://img.shields.io/github/stars/ZingerLittleBee/Heeler?style=flat-square&color=E8B923&logo=github&logoColor=white)](https://github.com/ZingerLittleBee/Heeler/stargazers)
-[![CI](https://img.shields.io/github/actions/workflow/status/ZingerLittleBee/Heeler/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/ZingerLittleBee/Heeler/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/SiNiSon-99/Heeler/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/SiNiSon-99/Heeler/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-6F42C1?style=flat-square)](LICENSE)
 [![Swift](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white&style=flat-square)](https://www.swift.org)
 [![iOS](https://img.shields.io/badge/iOS-18%2B-000000?logo=apple&logoColor=white&style=flat-square)](https://developer.apple.com/ios/)
-[![App Store](https://img.shields.io/badge/App_Store-available-0D96F6?logo=apple&logoColor=white&style=flat-square)](https://apps.apple.com/us/app/heeler-for-herdr/id6797263135)
-
-<a href="https://trendshift.io/repositories/151670?utm_source=repository-badge&amp;utm_medium=badge&amp;utm_campaign=badge-repository-151670" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/151670" alt="ZingerLittleBee%2FHeeler | Trendshift" width="250" height="55"/></a>
 
 English | [简体中文](./README-zh.md)
 
@@ -25,6 +18,8 @@ English | [简体中文](./README-zh.md)
 ---
 
 Heeler is an **agent console**: a native dashboard of every coding agent running on your machines, sorted by who needs you. Open an Agent to read and steer its live terminal, draft with the full iOS keyboard in a native Composer, and Send the complete message once — all over plain SSH.
+
+This independent fork is in development and has no fork-operated push relay or distributed iOS build yet. Foreground SSH console use does not require a relay. Push and Live Activities remain off until a valid custom relay is configured; original Heeler relay addresses are rejected. Existing Host registration files and keys are retained until deliberately removed.
 
 ## Screenshots
 
@@ -60,7 +55,7 @@ Heeler is an **agent console**: a native dashboard of every coding agent running
   key fingerprint.
 - **Notifications + Live Activities** — end-to-end encrypted pushes when an
   Agent goes Blocked or Done, and a lock-screen / Dynamic Island banner
-  tracking Agents in real time; the relay can never read the content
+  tracking Agents in real time when a compatible custom relay is configured; the relay cannot read encrypted details
   ([PRIVACY.md](PRIVACY.md)).
 - **Worktrees** — start an Agent on a clean checkout of the workspace's repo.
 - **Appearance** — System, Light, or Dark; 30 terminal themes with separate
@@ -90,8 +85,9 @@ On the machine running herdr (Node >= 20, herdr >= 0.7.5, OpenSSH server on —
 macOS: **System Settings > General > Sharing > Remote Login**):
 
 ```bash
-herdr plugin install ZingerLittleBee/Heeler/plugin --ref main --yes
-herdr plugin action invoke heeler.pair
+# After this fork's routing change has been reviewed and merged, install a
+# reviewed immutable commit of SiNiSon-99/Heeler/plugin with herdr plugin install.
+# Then invoke the heeler.pair action to show a Pairing Code.
 ```
 
 Scan the Pairing Code QR it shows and the machine is added as a Host — the
@@ -114,8 +110,4 @@ layout, build/test, and conventions.
 
 ## Status
 
-Released on the [App Store](https://apps.apple.com/us/app/heeler-for-herdr/id6797263135).
-It is not yet available in every country or region; where it is missing, the
-[TestFlight](https://testflight.apple.com/join/aXSxRn4r) build stays available.
-Built for personal use first and shaped by daily driving, so expect rough edges and
-fast iteration. Not affiliated with the herdr project.
+Independent fork under development. No fork build is available on TestFlight or the App Store. Not affiliated with the herdr project. Original Heeler authorship and Apache 2.0 license remain in the repository history and [LICENSE](LICENSE).

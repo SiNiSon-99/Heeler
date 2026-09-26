@@ -39,11 +39,10 @@ enum NotificationPrivacyCopy {
         "The relay cannot decrypt this content because it never receives your Notification Key.",
     ]
 
-    /// The self-built-app caveat for the custom relay setting.
+    /// A custom relay needs credentials for this build's APNs topic.
     static let customRelayCaveat =
-        "A custom relay only works with an app you build and sign yourself. It must use APNs "
-        + "credentials authorized for that app's bundle ID. Only the developer-hosted relay "
-        + "is configured to deliver notifications to this App Store or TestFlight build."
+        "Push is disabled until you enter a custom relay. It must use APNs credentials "
+        + "authorized for this app's bundle ID. No relay is supplied by this fork."
 
     /// The primary action label on the explainer sheet, right before the iOS
     /// permission prompt appears.
@@ -55,7 +54,7 @@ enum NotificationPrivacyCopy {
     /// like every `URL(string:)` in the app (no force unwraps); a link that
     /// depends on it simply hides if the constant ever fails to parse.
     static let privacyPolicyURL = URL(
-        string: "https://github.com/ZingerLittleBee/Heeler/blob/main/PRIVACY.md")
+        string: "https://github.com/SiNiSon-99/Heeler/blob/main/PRIVACY.md")
 
     /// Per-Host Live Activity toggle footer: counts are what the Lock Screen
     /// renders in the clear; names and titles stay inside the envelope.

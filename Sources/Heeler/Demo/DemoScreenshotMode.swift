@@ -114,7 +114,7 @@
             let notificationPreferences = NotificationPreferencesStore(
                 transports: console,
                 deviceToken: { nil },
-                relayBaseURL: { nil })
+                relayRoute: { .disabled })
             return DemoScreenshotComposition(
                 hosts: HostStore(volatileHosts: DemoScreenshotFixture.hosts),
                 console: console,

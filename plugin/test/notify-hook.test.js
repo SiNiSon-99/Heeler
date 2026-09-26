@@ -259,6 +259,22 @@ function decryptEnvelope(envelope, key) {
 }
 
 suite("notify-hook: sending", () => {
+  for (const relayUrl of [undefined, "", "relay.example.com", "https://heeler-apns.bybee.dev", "https://herdr-apns.bybee.dev", "https://herdr-push-relay.69709991236.workers.dev"]) {
+    test(`disabled or rejected route ${JSON.stringify(relayUrl)} sends nothing`, async () => {
+      await startFakeRelay();
+      writeConfig({ relay_url: relayUrl });
+      writeRegistration([device()]);
+      writeHerdrStub({ status: "blocked" });
+      const before = readFileSync(join(configDir, "notifications.json"));
+
+      const result = await runHook(statusEvent("blocked"));
+
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(relay.requests.length, 0);
+      assert.deepEqual(readFileSync(join(configDir, "notifications.json")), before);
+      assert.equal(stubInvocations().length, 0);
+    });
+  }
   test("a confirmed Blocked transition posts one decryptable push per device", async () => {
     await startFakeRelay();
     writeConfig();

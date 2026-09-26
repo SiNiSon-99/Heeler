@@ -1,40 +1,43 @@
 import Foundation
 
-/// The production Push Relay endpoint shared by Notification Registration and
-/// the settings surface. The plugin carries the same value as its runtime
-/// default; changing the production endpoint requires updating both sides.
-enum NotificationRelayEndpoint {
-    static let productionBaseURLString = "https://heeler-apns.bybee.dev"
+/// A missing or rejected destination never arms push.
+enum NotificationRelayRoute: Equatable, Sendable {
+    case disabled
+    case invalid
+    case custom(URL)
 
-    /// Endpoints that shipped as the production default before. Treat them as
-    /// the default rather than a custom override so existing installations
-    /// migrate on their next Notification Registration.
-    static let legacyProductionBaseURLStrings = [
+    var usableURL: URL? {
+        guard case .custom(let url) = self else { return nil }
+        return NotificationRelayEndpoint.validate(url.absoluteString)
+    }
+}
+
+enum NotificationRelayEndpoint {
+    static let originalBaseURLStrings = [
+        "https://heeler-apns.bybee.dev",
         "https://herdr-push-relay.69709991236.workers.dev",
-        "https://herdr-apns.bybee.dev",
+        "https://herdr-apns.bybee.dev"
     ]
 
-    static var productionBaseURL: URL? {
-        URL(string: productionBaseURLString)
-    }
-
-    static func resolve(customBaseURL: URL?) -> URL? {
-        guard let customBaseURL else { return productionBaseURL }
-        if isLegacyProductionBaseURL(customBaseURL.absoluteString) {
-            return productionBaseURL
+    static func isOriginal(_ value: String) -> Bool {
+        guard let host = URLComponents(string: value.trimmingCharacters(in: .whitespacesAndNewlines))?
+            .host?.lowercased() else { return false }
+        return originalBaseURLStrings.contains {
+            URLComponents(string: $0)?.host?.lowercased() == host
         }
-        return customBaseURL
     }
 
-    static func isLegacyProductionBaseURL(_ value: String) -> Bool {
-        legacyProductionBaseURLStrings.contains(normalized(value))
-    }
-
-    private static func normalized(_ value: String) -> String {
-        var result = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        while result.hasSuffix("/") {
-            result.removeLast()
-        }
-        return result
+    static func validate(_ text: String) -> URL? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+            let components = URLComponents(string: trimmed),
+            let scheme = components.scheme?.lowercased(),
+            scheme == "http" || scheme == "https",
+            let host = components.host, !host.isEmpty,
+            components.user == nil, components.password == nil,
+            components.query == nil, components.fragment == nil,
+            !isOriginal(trimmed), let url = components.url
+        else { return nil }
+        return url
     }
 }

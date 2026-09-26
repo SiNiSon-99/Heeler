@@ -32,10 +32,11 @@ Agent Notifications use the limited-purpose Push Relay described below.
 ## Agent Notifications and the Push Relay
 
 Agent Notifications can tell you when an agent is blocked or done while Heeler
-is backgrounded or closed. Apple Push Notification service (APNs) requires an
-Apple credential authorized for this app's bundle ID, so the App Store build
-uses an open-source push relay hosted by the developer at
-`https://heeler-apns.bybee.dev`.
+is backgrounded or closed. In this independent fork, push delivery is disabled
+until you enter a valid custom relay URL. Blank, malformed, and original Heeler
+relay addresses do not send. Apple Push Notification service (APNs) requires
+credentials authorized for this app's bundle ID; no relay or APNs credentials
+are supplied by this fork.
 
 The relay has no accounts, database, durable queue, retry queue, or message
 history. A Host encrypts the notification details with its Notification Key,
@@ -69,9 +70,9 @@ of displaying unverified content.
 
 ### Purpose, retention, and service providers
 
-The developer-hosted relay uses this data only to validate requests, limit
-abuse, and deliver notifications to APNs. It does not use the data for
-advertising, analytics, tracking, profiling, or sale.
+The included relay code uses this data to validate requests, limit abuse, and
+deliver notifications to APNs. A custom operator controls its own deployment
+and data handling.
 
 The relay code does not write device tokens, notification bodies, ciphertext,
 or request history to application-managed durable storage. Source IP addresses
@@ -79,9 +80,9 @@ and Apple push tokens are used in volatile, per-instance memory for one-minute
 rate-limit windows. This memory is not a durable user record and is discarded
 when the worker instance is recycled.
 
-The relay is hosted on Cloudflare Workers, and notifications are delivered by
-Apple APNs. Cloudflare and Apple may process network and delivery metadata as
-infrastructure providers under their published privacy terms. Service providers
+The included relay targets Cloudflare Workers if deployed; no such deployment
+is configured for this fork. A custom relay operator and Apple APNs may process
+network and delivery metadata under their own terms. Service providers
 processing data on Heeler's behalf are required to protect it consistently with
 this policy and applicable law. Heeler uses them only for infrastructure and
 push delivery.
@@ -104,23 +105,23 @@ Agent Notifications and Live Activities are optional.
 Heeler has no developer-operated account or user-content database, so there is
 normally no server-side profile or content for the developer to retrieve or
 delete. For a privacy or deletion request, open a content-free issue in the
-[project issue tracker](https://github.com/ZingerLittleBee/Heeler/issues/new)
+[project issue tracker](https://github.com/SiNiSon-99/Heeler/issues/new)
 and ask for a private follow-up channel. Do not put credentials, tokens, Host
 details, or other sensitive information in a public issue.
 
 ## Custom relay URL
 
-The herdr plugin and Heeler accept a custom push relay base URL, so you can run
-your own relay instead of the developer-hosted one. The relay source is public
-so its behavior can be inspected.
+The herdr plugin and Heeler accept an explicit custom push relay base URL. The
+relay source is public so its behavior can be inspected. Existing Host
+registrations and keys are retained when routing is disabled or invalid;
+deliberate removal remains available in Settings.
 
-A custom relay only works with an app you build and sign yourself. It must use
-APNs credentials authorized for that app's bundle ID. Only the developer-hosted
-relay is configured to deliver notifications to this App Store or TestFlight
-build.
+A custom relay must use APNs credentials authorized for this app's bundle ID.
+The inherited App Store and TestFlight builds belong to the original project,
+not this fork.
 
 ## Contact
 
 For questions about this policy, use the
-[project issue tracker](https://github.com/ZingerLittleBee/Heeler/issues) and do
+[project issue tracker](https://github.com/SiNiSon-99/Heeler/issues) and do
 not include sensitive information.

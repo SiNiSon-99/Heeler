@@ -49,7 +49,7 @@ node --version    # 20 or newer
 Install the plugin from GitHub:
 
 ```bash
-herdr plugin install ZingerLittleBee/Heeler/plugin --ref main --yes
+herdr plugin install SiNiSon-99/Heeler/plugin --ref REVIEWED_COMMIT_SHA --yes
 ```
 
 Herdr stores the plugin in its managed checkout and runs the manifest's
@@ -73,10 +73,10 @@ not in the terminal that ran invoke.
 Scan the code in Heeler to add this machine as a Host, or press `c` on the
 QR screen to copy the Pairing Code and paste it in the app (macOS uses
 `pbcopy`; elsewhere the code is printed for manual selection). Then open the
-Heeler settings, enable Agent Notifications, grant the iOS notification
-permission, and enable Notifications for this Host. Leave **Custom Push
-Relay** empty to use the production endpoint at
-`https://heeler-apns.bybee.dev`.
+Heeler settings, enter a valid custom Push Relay URL, grant the iOS notification
+permission, and enable Notifications for this Host. A blank, malformed, or
+original Heeler relay URL leaves delivery disabled. Existing registrations
+remain in place until deliberately removed.
 
 To update an installed GitHub-managed plugin, run the same `plugin install`
 command again. To inspect notification or pairing failures:
@@ -505,8 +505,8 @@ Anti-noise, in order:
    `HERDR_PLUGIN_STATE_DIR/notify/`; a same-status repeat sends nothing. A
    *different* status that survives its own debounce re-arms the pane.
 
-Each eligible device gets one `POST https://heeler-apns.bybee.dev/push` by
-default (see `relay/README.md`), carrying the encrypted envelope and an opaque
+Each eligible device gets one `POST` to the configured custom relay's `/push`
+route (see `relay/README.md`), carrying the encrypted envelope and an opaque
 per-pane `collapse` key (derived from the device's Notification Key and the
 pane id, so the relay cannot guess the pane while newer statuses still replace
 older notifications). Transient failures (network errors, 429, 5xx) are
@@ -519,7 +519,7 @@ the plugin config dir:
 
 | Field            | Type    | Meaning |
 | ---------------- | ------- | ------- |
-| `relay_url`      | string  | Optional Push Relay base URL override for a self-built app. Defaults to `https://heeler-apns.bybee.dev`; the app writes the resolved value during Notification Registration. |
+| `relay_url`      | string  | Explicit custom Push Relay base URL. Missing, malformed, and original-operator endpoints disable delivery; the app writes a validated value during Notification Registration. |
 | `debounce_ms`    | integer | Debounce sleep override for the alert notify hook. Default 5000. |
 | `activity_debounce_ms` | integer | Latest-wins debounce sleep for the Live Activity hook. Default 1500. |
 | `retry_delay_ms` | integer | Delay between retry attempts. Default 1000. |

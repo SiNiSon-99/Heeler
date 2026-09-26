@@ -244,6 +244,22 @@ function decryptEnvelope(envelope, key) {
 }
 
 suite("activity-hook: cheap exits", () => {
+  for (const relayUrl of [undefined, "", "relay.example.com", "https://heeler-apns.bybee.dev", "https://herdr-apns.bybee.dev", "https://herdr-push-relay.69709991236.workers.dev"]) {
+    test(`disabled or rejected route ${JSON.stringify(relayUrl)} sends no activity`, async () => {
+      await startFakeRelay();
+      writeConfig({ relay_url: relayUrl });
+      writeRegistration([device()]);
+      writeHerdrStub([listedAgent()]);
+      const before = readFileSync(join(configDir, "notifications.json"));
+
+      const result = await runHook(statusEvent("working"));
+
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(relay.requests.length, 0);
+      assert.deepEqual(readFileSync(join(configDir, "notifications.json")), before);
+      assert.equal(stubInvocations().length, 0);
+    });
+  }
   test("no live_activity entries send zero requests", async () => {
     await startFakeRelay();
     writeConfig();

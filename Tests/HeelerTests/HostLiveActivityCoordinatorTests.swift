@@ -27,6 +27,7 @@ struct HostLiveActivityCoordinatorTests {
         var statuses: [UUID: EventsSessionStatus] = [:]
         var deviceToken: APNSDeviceToken?
         var layout: AgentRowLayout?
+        var relayRoute: NotificationRelayRoute = .custom(URL(string: "https://relay.example.com")!)
     }
 
     private func makeDefaults() throws -> (UserDefaults, cleanup: () -> Void) {
@@ -47,6 +48,7 @@ struct HostLiveActivityCoordinatorTests {
             controller: controller,
             preferences: LiveActivityPreferences(defaults: defaults),
             transports: ScriptedTransportProvider(transports: [host.id: transport]),
+            relayRoute: { world.relayRoute },
             keys: keys,
             ceremony: NotificationRegistrationCeremony(keys: keys),
             deviceToken: { world.deviceToken },
@@ -80,7 +82,8 @@ struct HostLiveActivityCoordinatorTests {
     private func registerDevice() async throws {
         let keys = NotificationKeyStore(secrets: secrets)
         try await NotificationRegistrationCeremony(keys: keys).register(
-            hostID: host.id, hostName: "mbp", deviceToken: token, over: transport)
+            hostID: host.id, hostName: "mbp", deviceToken: token,
+            route: .custom(URL(string: "https://relay.example.com")!), over: transport)
     }
 
     private func agent(
@@ -189,6 +192,23 @@ struct HostLiveActivityCoordinatorTests {
     }
 
     // MARK: Fail closed
+
+    @Test func unusableRelayPreventsNewActivityAndRemoteWrites() async throws {
+        let (defaults, cleanup) = try makeDefaults()
+        defer { cleanup() }
+        try await registerDevice()
+        armWorld()
+        let original = await transport.notificationRegistration
+        world.relayRoute = .invalid
+        let coordinator = makeCoordinator(defaults: defaults)
+        coordinator.start()
+        coordinator.agentsDidChange([agent(observedPaneID, .working)])
+        try await waitPastSettle()
+        #expect(controller.requested.isEmpty)
+        #expect(await transport.notificationRegistration == original)
+        #expect(await transport.replacedNotificationRegistrations.count == 1)
+        #expect(coordinator.reconcileNotes[host.id]?.contains("Push Relay URL") == true)
+    }
 
     @Test func staysIdleWhenThePreferenceIsOff() async throws {
         let (defaults, cleanup) = try makeDefaults()

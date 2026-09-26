@@ -13,6 +13,7 @@ final class HostLiveActivityCoordinator {
 
     @ObservationIgnored private let controller: any LiveActivityControlling
     @ObservationIgnored private let transports: any NotificationTransportProvider
+    @ObservationIgnored private let relayRoute: @MainActor () -> NotificationRelayRoute
     @ObservationIgnored private let keys: NotificationKeyStore
     @ObservationIgnored private let ceremony: NotificationRegistrationCeremony
     @ObservationIgnored private let deviceToken: @MainActor () -> APNSDeviceToken?
@@ -43,6 +44,7 @@ final class HostLiveActivityCoordinator {
         controller: any LiveActivityControlling,
         preferences: LiveActivityPreferences,
         transports: any NotificationTransportProvider,
+        relayRoute: @escaping @MainActor () -> NotificationRelayRoute = { .disabled },
         keys: NotificationKeyStore = NotificationKeyStore(),
         ceremony: NotificationRegistrationCeremony? = nil,
         deviceToken: @escaping @MainActor () -> APNSDeviceToken?,
@@ -58,6 +60,7 @@ final class HostLiveActivityCoordinator {
         self.controller = controller
         self.preferences = preferences
         self.transports = transports
+        self.relayRoute = relayRoute
         self.keys = keys
         self.ceremony = ceremony ?? NotificationRegistrationCeremony(keys: keys)
         self.deviceToken = deviceToken
@@ -202,6 +205,9 @@ final class HostLiveActivityCoordinator {
     // MARK: Desire / settle
 
     private func scheduleSettle(for hostID: Host.ID) {
+        if relayRoute().usableURL == nil {
+            reconcileNotes[hostID] = "idle — set a valid custom Push Relay URL"
+        }
         holdIfUnknown(hostID)
         if shouldDeferApply(for: hostID) {
             settleTasks[hostID]?.cancel()
@@ -270,6 +276,7 @@ final class HostLiveActivityCoordinator {
     /// The gate that kept `computeDesired` from producing content, in the
     /// order the gates run — surfaced by the Settings diagnostic row.
     private func desireBlocker(for hostID: Host.ID) -> String {
+        if relayRoute().usableURL == nil { return "set a valid custom Push Relay URL" }
         if !controller.areEnabled { return "iOS has Live Activities disabled for Heeler" }
         if !preferences.isEnabled(for: hostID) { return "the per-Host toggle is off" }
         if deviceToken() == nil { return "no push device token yet" }
@@ -285,6 +292,7 @@ final class HostLiveActivityCoordinator {
     }
 
     private func computeDesired(for hostID: Host.ID) -> AgentActivityDesire? {
+        guard relayRoute().usableURL != nil else { return nil }
         guard controller.areEnabled else { return nil }
         guard preferences.isEnabled(for: hostID) else { return nil }
         guard deviceToken() != nil else { return nil }
@@ -470,6 +478,8 @@ final class HostLiveActivityCoordinator {
     }
 
     private func perform(_ job: TokenJob, hostID: Host.ID) async -> Bool {
+        let route = relayRoute()
+        guard route.usableURL != nil else { return false }
         guard let token = deviceToken() else { return false }
         let pins = pinnedPaneIDs(hostID)
         let layout = rowLayout(hostID)
@@ -481,10 +491,12 @@ final class HostLiveActivityCoordinator {
                     try await ceremony.setLiveActivityToken(
                         tokenHex: hex, startedAt: startedAt, deviceToken: token,
                         pinnedPaneIDs: pins, rowLayout: layout, hostName: hostName,
+                        route: route,
                         over: transport)
                 case .setPreferences:
                     try await ceremony.setLiveActivityPinnedPaneIDs(
-                        pins, rowLayout: layout, hostName: hostName, deviceToken: token, over: transport)
+                        pins, rowLayout: layout, hostName: hostName, deviceToken: token,
+                        route: route, over: transport)
                 case .clear:
                     try await ceremony.clearLiveActivityToken(
                         deviceToken: token, over: transport)

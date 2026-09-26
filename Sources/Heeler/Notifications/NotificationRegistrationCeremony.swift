@@ -17,41 +17,37 @@ struct NotificationRegistrationCeremony: Sendable {
     }
 
     /// Registers this device for Agent Notifications from one Host. The
-    /// Notification Key is saved locally before the remote write: a write
-    /// that fails after that leaves a key the retry reuses, whereas the
-    /// reverse order could put a key on the Host that this device can no
-    /// longer decrypt with. Re-registration with the same token is
-    /// idempotent — the file keeps one entry per device token.
+    /// destination is written before a new entry, so configuration failure
+    /// cannot arm a token under an old route. The key is saved before the
+    /// registration write, so a failed write can retry with the same key.
+    /// Re-registration is idempotent: one entry per device token.
     @discardableResult
     func register(
         hostID: UUID,
         hostName: String,
         deviceToken: APNSDeviceToken,
         notify: NotificationTriggerPreferences = NotificationTriggerPreferences(),
-        relayBaseURL: URL? = nil,
+        route: NotificationRelayRoute = .disabled,
         over transport: any Transport
     ) async throws -> NotificationKeyRecord {
-        let record = try hostRecord(hostID: hostID, hostName: hostName)
-        try keys.save(record)
+        guard let relayURL = route.usableURL else {
+            throw NotificationRegistrationError.relayUnavailable
+        }
         let file = try NotificationRegistrationFile.decode(
             try await transport.readNotificationRegistration())
+        let record = try hostRecord(hostID: hostID, hostName: hostName)
+        try await applyRelayURL(relayURL, over: transport)
+        try keys.save(record)
         let entry = NotificationDeviceEntry(
             token: deviceToken, key: record.key, notify: notify)
         try await transport.replaceNotificationRegistration(
             try file.upserting(entry).encoded())
-        if let resolvedRelayURL = NotificationRelayEndpoint.resolve(
-            customBaseURL: relayBaseURL)
-        {
-            try await applyRelayURL(resolvedRelayURL, over: transport)
-        }
         return record
     }
 
     /// Writes the resolved Push Relay base URL into the Host's `notify.json` so
     /// this Host's notify hook POSTs there (#76). Read-merge-write preserves
-    /// the plugin's own knobs (`debounce_ms`, `retry_delay_ms`, and future
-    /// fields). The production endpoint is written for the empty/default app
-    /// setting; self-builders can still supply an explicit custom URL.
+    /// the plugin's own knobs (`debounce_ms`, `retry_delay_ms`, and future fields).
     private func applyRelayURL(_ relayBaseURL: URL, over transport: any Transport) async throws {
         let config = try NotificationConfigFile.decode(
             try await transport.readNotificationConfig())
@@ -90,8 +86,12 @@ struct NotificationRegistrationCeremony: Sendable {
         pinnedPaneIDs: [String] = [],
         rowLayout: AgentRowLayout? = nil,
         hostName: String? = nil,
+        route: NotificationRelayRoute = .disabled,
         over transport: any Transport
     ) async throws {
+        guard route.usableURL != nil else {
+            throw NotificationRegistrationError.relayUnavailable
+        }
         let file = try NotificationRegistrationFile.decode(
             try await transport.readNotificationRegistration())
         guard file.containsDevice(token: deviceToken.hex) else {
@@ -111,8 +111,12 @@ struct NotificationRegistrationCeremony: Sendable {
         rowLayout: AgentRowLayout? = nil,
         hostName: String? = nil,
         deviceToken: APNSDeviceToken,
+        route: NotificationRelayRoute = .disabled,
         over transport: any Transport
     ) async throws {
+        guard route.usableURL != nil else {
+            throw NotificationRegistrationError.relayUnavailable
+        }
         guard let data = try await transport.readNotificationRegistration() else { return }
         let file = try NotificationRegistrationFile.decode(data)
         var updated = file.settingLiveActivityPinnedPaneIDs(
