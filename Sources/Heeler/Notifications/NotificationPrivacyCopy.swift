@@ -7,8 +7,8 @@ import Foundation
 /// (never a "server"), it sees the device token, ciphertext, source IP, and
 /// request timing, and the Live Activity fields APNs needs in cleartext. It
 /// cannot see the encrypted identifying content (project, task, agent type,
-/// Host, or pane id); a custom relay only helps a self-built app. All copy is
-/// English by project convention.
+/// Host, or pane id); push stays disabled until a custom relay is set. All
+/// copy is English by project convention.
 enum NotificationPrivacyCopy {
     /// The explainer's lead line before the iOS permission prompt.
     static let explainerTitle = "Before you turn on notifications"

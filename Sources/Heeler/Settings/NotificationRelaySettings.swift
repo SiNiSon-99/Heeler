@@ -58,10 +58,12 @@ final class NotificationRelaySettings {
         relayURL?.scheme?.lowercased() == "http"
     }
 
-    /// Parses a custom relay base URL: an absolute http(s) URL with a host and
-    /// no query or fragment. A path prefix is allowed (the relay may be
-    /// deployed under a subpath); the plugin appends `/push` to whatever base
-    /// it is given, so a query or fragment would only be a mistake.
+    /// Parses a custom relay base URL: an absolute http(s) URL with a host, no
+    /// credentials, query, or fragment, and not an original Heeler operator
+    /// host (`NotificationRelayEndpoint.validate`). A path prefix is allowed
+    /// (the relay may be deployed under a subpath); the plugin appends `/push`
+    /// to whatever base it is given, so a query or fragment would only be a
+    /// mistake.
     static func validate(_ text: String) -> URL? {
         NotificationRelayEndpoint.validate(text)
     }

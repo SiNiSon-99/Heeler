@@ -45,7 +45,7 @@ struct NotificationRegistrationCeremony: Sendable {
         return record
     }
 
-    /// Writes the resolved Push Relay base URL into the Host's `notify.json` so
+    /// Writes the validated custom Push Relay base URL into the Host's `notify.json` so
     /// this Host's notify hook POSTs there (#76). Read-merge-write preserves
     /// the plugin's own knobs (`debounce_ms`, `retry_delay_ms`, and future fields).
     private func applyRelayURL(_ relayBaseURL: URL, over transport: any Transport) async throws {

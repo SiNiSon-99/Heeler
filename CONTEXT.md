@@ -234,7 +234,7 @@ A notification telling the user an Agent crossed a notify-worthy status boundary
 _Avoid_: alert, push message, task notification
 
 **Push Relay**:
-The developer-hosted, stateless forwarder that holds the APNs credentials and relays encrypted notification payloads from Hosts to Apple. It sees device tokens and ciphertext, never content.
+The explicitly configured, stateless forwarder that holds the APNs credentials and relays encrypted notification payloads from Hosts to Apple. There is no default: push stays disabled until a valid custom relay URL is set, and original Heeler operator hosts are rejected. It sees device tokens and ciphertext, never content.
 _Avoid_: server, backend, push service
 
 **Notification Key**:
