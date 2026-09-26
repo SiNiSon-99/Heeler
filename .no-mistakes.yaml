@@ -12,7 +12,9 @@ commands:
     -only-testing:HeelerTests/NotificationPreferencesStoreTests
     -only-testing:HeelerTests/NotificationRegistrationCeremonyTests
     -only-testing:HeelerTests/HostLiveActivityCoordinatorTests
-    -only-testing:HeelerTests/NotificationPrivacyCopyTests'
+    -only-testing:HeelerTests/NotificationPrivacyCopyTests
+    -only-testing:HeelerTests/PushRegistrationStoreTests
+    -only-testing:HeelerTests/SettingsViewTests'
     && (cd plugin && npm ci && npm test)
     && (cd relay && npm test)
     && make verify-ssh-artifacts

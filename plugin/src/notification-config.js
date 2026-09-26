@@ -7,6 +7,9 @@ export const ORIGINAL_RELAY_URLS = new Set([
   "https://herdr-push-relay.69709991236.workers.dev",
   "https://herdr-apns.bybee.dev",
 ]);
+const ORIGINAL_RELAY_HOSTS = new Set(
+  [...ORIGINAL_RELAY_URLS].map((value) => new URL(value).hostname),
+);
 const DEFAULT_DEBOUNCE_MS = 5000;
 const DEFAULT_ACTIVITY_DEBOUNCE_MS = 1500;
 const DEFAULT_RETRY_DELAY_MS = 1000;
@@ -19,7 +22,7 @@ function normalizeRelayURL(value) {
   try { url = new URL(normalized); } catch { return null; }
   if (!["http:", "https:"].includes(url.protocol) || !url.hostname ||
       url.username || url.password || url.search || url.hash ||
-      ORIGINAL_RELAY_URLS.has(`${url.protocol}//${url.hostname.toLowerCase()}`)) return null;
+      ORIGINAL_RELAY_HOSTS.has(url.hostname)) return null;
   return normalized;
 }
 

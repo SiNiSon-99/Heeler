@@ -41,6 +41,12 @@ suite("notification config", () => {
 
       assert.equal(readNotificationConfig(configDir).relayUrl, null);
     });
+
+    test(`disables original operator host over http ${original}`, () => {
+      writeConfig({ relay_url: original.toUpperCase().replace("HTTPS://", "http://") + ":8443" });
+
+      assert.equal(readNotificationConfig(configDir).relayUrl, null);
+    });
   }
 
   for (const value of ["", "relay.example.com", "ftp://relay.example.com", "https://relay.example.com?x=1"]) {
